@@ -1,0 +1,38 @@
+{
+  "$comment": "Template config. Copy to configs/local.json and populate with your own values. Not committed.",
+  "candidate": {
+    "name": "Your Name",
+    "current_role": "Senior ML Engineer",
+    "current_company": "Your Current Employer",
+    "years_experience": 8,
+    "location": "City, ST",
+    "portfolio_path": ".claude/skills/jobe/reference.md"
+  },
+  "scoring_weights": {
+    "requiredSkills": 3,
+    "preferredSkills": 1,
+    "techStack": 2,
+    "domainKnowledge": 2,
+    "experienceLevel": 2,
+    "education": 1,
+    "softCultural": 0.5
+  },
+  "match_thresholds": {
+    "strong": 85,
+    "good": 70,
+    "stretch": 55,
+    "reach": 0
+  },
+  "company_tiers": {
+    "tier1": ["Google", "Meta", "Apple", "Amazon", "Netflix", "OpenAI", "Anthropic", "DeepMind"],
+    "strong_tech": ["Stripe", "Databricks", "Airbnb", "Lyft", "DoorDash", "Scale AI", "Figma", "Notion", "Spotify"],
+    "growth": [],
+    "enterprise": ["Add enterprise/CPG targets here"],
+    "finance": ["Goldman Sachs", "JPMorgan", "Citi", "Capital One", "Morgan Stanley"]
+  },
+  "api_keys": {
+    "serpapi": { "env_var": "SERPAPI_KEY", "required": false }
+  },
+  "output_dir": "signals/snapshots",
+  "report_dir": "reports"
+}

@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Environment / secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# User-layer files (personal / private)
+.claude/skills/jobe/modes/_profile.md
+.claude/skills/jobe/reference.md
+configs/local.json
+data/tracker.md
+data/story-bank.md
+data/followups.md
+data/apply-queue.json
+data/contacts.json
+data/resume-baseline.json
+data/companies/index.json
+
+# Run artifacts
+signals/
+reports/
+output/
+configs/_temp-*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Build / rendered outputs
+*.pptx
+*.docx
+*.pdf
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,28 @@
+{
+  "$schema": "Seed queries for discovery pipeline. Each entry is a (query, location) pair. Sources use these to drive searches; broader queries increase recall. Add archetype-specific queries for the candidate's portfolio depth.",
+  "queries": [
+    { "query": "Senior Machine Learning Engineer",      "location": "New York",      "archetype": "any" },
+    { "query": "Senior Machine Learning Engineer",      "location": "Remote",        "archetype": "any" },
+    { "query": "Staff Machine Learning Engineer",       "location": "New York",      "archetype": "any" },
+    { "query": "Staff Machine Learning Engineer",       "location": "Remote",        "archetype": "any" },
+    { "query": "Machine Learning Engineer",             "location": "New York",      "archetype": "any" },
+    { "query": "AI Engineer",                           "location": "New York",      "archetype": "Agentic" },
+    { "query": "AI Engineer",                           "location": "Remote",        "archetype": "Agentic" },
+    { "query": "Senior Data Scientist",                 "location": "New York",      "archetype": "any" },
+    { "query": "Applied ML Engineer",                   "location": "New York",      "archetype": "Applied ML" },
+    { "query": "Applied Scientist",                     "location": "New York",      "archetype": "Applied ML" },
+    { "query": "Senior Staff Machine Learning Engineer","location": "New York",      "archetype": "any" },
+    { "query": "Member of Technical Staff",             "location": "San Francisco", "archetype": "AI Platform" },
+    { "query": "LLM Engineer",                          "location": "New York",      "archetype": "AI Platform" },
+    { "query": "GenAI Engineer",                        "location": "New York",      "archetype": "Agentic" },
+    { "query": "ML Infrastructure Engineer",            "location": "New York",      "archetype": "ML Infra" },
+    { "query": "ML Platform Engineer",                  "location": "Remote",        "archetype": "ML Infra" },
+    { "query": "AI Agent Engineer",                     "location": "Remote",        "archetype": "Agentic" },
+    { "query": "Inference Engineer",                    "location": "Remote",        "archetype": "AI Platform" },
+    { "query": "Forward Deployed Engineer",             "location": "New York",      "archetype": "Forward Deployed" },
+    { "query": "Research Engineer Machine Learning",    "location": "New York",      "archetype": "any" },
+    { "query": "Causal Inference Scientist",            "location": "Remote",        "archetype": "Causal" },
+    { "query": "Experimentation Scientist",             "location": "Remote",        "archetype": "Causal" },
+    { "query": "MLOps Engineer",                        "location": "Remote",        "archetype": "ML Infra" }
+  ]
+}

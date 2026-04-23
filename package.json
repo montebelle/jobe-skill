@@ -1,0 +1,19 @@
+{
+  "name": "jobe",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Career-intelligence pipeline: MinHash LSH dedup, RRF ranking, multi-signal ghost-job detection, Cohen's kappa LLM-judge calibration, and demographic bias audit — operated as a Claude Code skill.",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/montebelle/jobe-skill"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "docxtemplater": "^3.68.4",
+    "dotenv": "^16.4.0",
+    "md-to-pdf": "^5.2.5",
+    "pizzip": "^3.2.0",
+    "pptxgenjs": "^4.0.1"
+  }
+}

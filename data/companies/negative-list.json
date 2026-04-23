@@ -1,0 +1,5 @@
+{
+  "$schema": "Companies the user does not want to see in discovery results. companySlugs must be lowercase, hyphenated, matching Posting.companySlug.",
+  "companySlugs": [],
+  "reasons": {}
+}
