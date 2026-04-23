@@ -47,7 +47,7 @@ Full-pipeline job search automation: discover, evaluate, apply, track, follow up
 - Positioning reasoning internal only, never in output
 - ATS normalization in both render-docx.js AND render-cover-letter.js
 - Recency: ATS collectors extract and filter by date fields (createdAt/publishedAt/updatedAt). WebSearch uses after: operator. Dead URLs filtered.
-- **Discovery is query-driven, not company-driven.** The pipeline asks "what jobs in the market match the candidate?" not "what is new at these 45 companies?". The company whitelist (portals.json) is now a seed for the emergent company index (data/companies/index.json), not the primary source of truth.
+- **Discovery is query-driven, not company-driven.** The pipeline asks "what jobs in the market match the candidate?" not "what is new at this fixed watchlist?". The company whitelist (portals.json) is now a seed for the emergent company index (data/companies/index.json), not the primary source of truth.
 - **Source plugin contract**: every file under collectors/sources/ exports `{id, name, requires, rateLimit, discover(ctx)}`. Missing env vars (listed in `requires`) cause the source to return `[]`; pipeline continues with remaining sources.
 - **Dedup is downstream, not upstream.** Every source emits raw Posting[]; canonical schema in lib/posting.js normalizes, lib/dedup.js merges URL-exact then fuzzy on (company-slug, role-normalized, location-primary) sha1.
 - **Enrichment is lazy.** Top-K (default 60) ranked postings get JD text fetched + comp extracted + 30-day cached. Rest skip enrich for speed.
@@ -66,4 +66,4 @@ Full-pipeline job search automation: discover, evaluate, apply, track, follow up
 - Anti-fabrication: every claim traces to code. No internal project names.
 - Deep technical bullets: algorithms, parameter values, architectural patterns
 - Data contract: user-layer never overwritten. System-layer replaced on install. default.json protected with if-not-exists guard.
-- install scripts copy CLAUDE.md, all 9 lib files, all modes, all agents
+- install scripts copy CLAUDE.md, all 23 lib files, all modes, all agents
