@@ -1,0 +1,71 @@
+{
+  "_comment": "Copy this file to data/resume-baseline.json and fill in your real data. The keys you set in `experience[].company` must appear in bullet-library.json's `companyKeyMap`, which maps each company to a role-key (e.g. 'current', 'prior1') under which the bullet pool lives.",
+
+  "name": "Your Full Name",
+  "company": "Target Company (overwritten per posting)",
+  "role": "Target Role (overwritten per posting)",
+  "date": "2026-01-01",
+
+  "contact": {
+    "phone": "+1 (555) 555-5555",
+    "email": "you@example.com",
+    "location": "City, ST (or 'Remote')",
+    "linkedin": "linkedin.com/in/your-handle",
+    "github": "github.com/your-handle"
+  },
+
+  "summary": "2-3 sentence career narrative. Lead with current scope and one signature outcome. Mention any parallel side-project or consultancy you want visible. The role-keyed bullets below carry the technical depth, so keep this paragraph human and specific — not a feature list.",
+
+  "experience": [
+    {
+      "title": "Senior Engineer (Current)",
+      "company": "Acme Corp",
+      "location": "Remote",
+      "dates": "Jan 2024 to Present",
+      "subtitle": "Optional one-line context: team, scope, products, brands, etc.",
+      "bullets": [
+        "Bullets are populated per-posting by lib/bullet-select.js from data/bullet-library.json. The text here is a placeholder — once you're set up, the selector overwrites these per-JD."
+      ]
+    },
+    {
+      "title": "Software Engineer",
+      "company": "Previous Co",
+      "location": "Boston, MA",
+      "dates": "Mar 2020 to Dec 2023",
+      "subtitle": "",
+      "bullets": [
+        "Same — populated by bullet-select."
+      ]
+    }
+  ],
+
+  "selectedProjects": [
+    {
+      "name": "side-project-a",
+      "summary": "Replaced by lib/bullet-select pickProjects() per posting."
+    }
+  ],
+
+  "education": [
+    {
+      "degree": "B.S. Your Major",
+      "school": "Your University",
+      "location": "City, ST",
+      "dates": "2016 - 2020"
+    }
+  ],
+
+  "skills": {
+    "Languages": "Python, TypeScript, SQL",
+    "ML": "PyTorch, scikit-learn, statsmodels",
+    "Infra": "AWS, GCP, Docker, Kubernetes, Terraform",
+    "Data": "BigQuery, Snowflake, Airflow, Spark"
+  },
+
+  "defaultBulletCounts": {
+    "current": 4,
+    "prior1": 2,
+    "prior2": 2,
+    "prior3": 1
+  }
+}

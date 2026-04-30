@@ -1,0 +1,91 @@
+{
+  "_comment": "Copy to data/bullet-library.json and replace with your real bullets. The role-keys (current / prior1 / prior2 / prior3 / sideproject) are arbitrary names — what matters is that companyKeyMap maps your resume-baseline.json experience[].company strings to role-keys here, and that bulletCounts in your spec uses the same keys.",
+
+  "companyKeyMap": {
+    "Acme Corp": "current",
+    "Previous Co": "prior1",
+    "Older Co": "prior2",
+    "Earliest Co": "prior3"
+  },
+
+  "current": [
+    {
+      "id": "current-platform-build",
+      "archetypes": ["AI Platform", "ML Infrastructure"],
+      "keywords": ["fastapi", "embedding", "retrieval", "p95 latency", "production"],
+      "text": "Built and operate the embedding + retrieval platform: FastAPI service exposing /v1/embeddings (nomic-embed-text-v1.5, L2-normalized server-side), hybrid retrieval (vector + BM25 with MMR re-ranking), 20K-entry vector store at sub-200ms p95, serving 9 production applications."
+    },
+    {
+      "id": "current-causal-survival",
+      "archetypes": ["Causal", "Applied ML"],
+      "keywords": ["survival", "hazard ratio", "propensity", "doubly robust", "AIPW"],
+      "text": "Shipped a 5M-user discrete-time complementary log-log survival model with cross-fitted propensity scores, IPW, propensity matching (0.1 caliper), Doubly Robust AIPW, and Rosenbaum sensitivity bounds, producing actionable findings reshaping marketing-spend allocation."
+    },
+    {
+      "id": "current-agent-orchestration",
+      "archetypes": ["Agentic", "AI Platform"],
+      "keywords": ["agent", "orchestration", "multi-agent", "workflow", "pipeline"],
+      "text": "Architected a 4-stage deterministic agent pipeline (chosen over LLM router per Cemri MAST 2503.13657 / Agentless 2407.01489) threading a typed blackboard across 5 specialized skills, collapsing a previously week-long manual process into one same-day automated brief at 8-15 min wall-clock."
+    },
+    {
+      "id": "current-safety-layer",
+      "archetypes": ["Agentic", "AI Platform"],
+      "keywords": ["safety", "prompt injection", "guardrail", "PII", "output gate"],
+      "text": "Engineered a 4-hook output safety layer (prompt injection, tool allowlist, two-pass deterministic regex + LLM review over PII / E.164 / email / UUID / credential patterns, risk-scored cancellation): cheap regex catches 85% of violations at zero marginal cost, LLM review reserved for edge cases."
+    },
+    {
+      "id": "current-forecast-platform",
+      "archetypes": ["Applied ML", "ML Infrastructure"],
+      "keywords": ["forecast", "time-series", "panel", "SARIMAX", "ensemble"],
+      "text": "Built a multi-model forecasting orchestration platform (SARIMAX, Holt-Winters, ensemble, panel ML) across 4 business divisions, 700+ forecast paths, with adaptive tier-based config, particle-filter MCMC, and multi-level parallelism."
+    }
+  ],
+
+  "prior1": [
+    {
+      "id": "prior1-mmm-platform",
+      "archetypes": ["Applied ML", "Causal"],
+      "keywords": ["MMM", "marketing mix", "media mix", "regression"],
+      "text": "Led a 4-channel marketing-mix model with Bayesian regularization across $X annual ad spend, producing budget-allocation recommendations adopted by 3 brand teams and shifting Y% of spend toward higher-ROAS channels."
+    },
+    {
+      "id": "prior1-lookalike",
+      "archetypes": ["Applied ML"],
+      "keywords": ["lookalike", "audience", "propensity"],
+      "text": "Designed a 4-classifier lookalike audience benchmark (logistic regression / XGBoost / LightGBM / FFNN) with cross-validated calibration, deployed across N campaigns and replacing ad-platform default targeting."
+    }
+  ],
+
+  "prior2": [
+    {
+      "id": "prior2-lead-scoring",
+      "archetypes": ["Applied ML"],
+      "keywords": ["lead scoring", "conversion", "ranking"],
+      "text": "Rebuilt the lead-scoring pipeline: from 200 to 2,000 qualified leads / month, $1M+ incremental revenue attributed."
+    }
+  ],
+
+  "prior3": [
+    {
+      "id": "prior3-portfolio",
+      "archetypes": ["Applied ML"],
+      "keywords": ["risk", "portfolio", "credit"],
+      "text": "Built loan-portfolio default-risk models in Python and Excel VBA across $X portfolio."
+    }
+  ],
+
+  "selectedProjects": [
+    {
+      "id": "proj-side-tool",
+      "archetypes": ["Agentic", "AI Platform"],
+      "keywords": ["agent", "automation", "workflow"],
+      "text": "Built and operate an autonomous multi-cron platform serving a 3-client fleet at $X / month total cost, with operations / outreach / intelligence / ops-center surfaces on a shared runtime."
+    },
+    {
+      "id": "proj-research",
+      "archetypes": ["Applied ML", "Causal"],
+      "keywords": ["research", "analysis", "open-source"],
+      "text": "Open-source reproduction of [paper / benchmark]: dataset shape, model variants, evaluation methodology."
+    }
+  ]
+}

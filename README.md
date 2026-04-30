@@ -1,208 +1,297 @@
-# Jobe — Career Intelligence Skill
+# Jobe
 
-Jobe is a [Claude Code](https://claude.com/claude-code) skill that runs the full job-search pipeline: discover recent postings across 8 source types, dedup them with MinHash LSH, rank with Reciprocal Rank Fusion, detect ghost jobs with a multi-signal model, generate ATS-normalized DOCX resumes + cover letters whose every claim traces to your own portfolio evidence, and track the whole funnel. Every empirical claim it makes is anchored to a citation in the code — no invented conversion rates, no unsourced percentages.
+**A career-intelligence skill for [Claude Code](https://claude.com/claude-code).** Jobe searches the open job market for you, ranks postings against your portfolio, and writes ATS-clean resumes and cover letters whose every claim traces to evidence you control. It runs as a set of slash commands inside Claude Code: `/jobe find`, `/jobe <url>`, `/jobe apply-all`, `/jobe tracker`.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-orange)](https://claude.com/claude-code)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)](https://nodejs.org/)
 
 ```bash
-/jobe find                          # discover recent postings + auto-generate resumes for top matches
-/jobe <URL>                         # evaluate a single posting (A–G blocks) + tailored resume + cover letter
-/jobe apply-all                     # paste-ready blocks for each role in the apply queue
-/jobe tracker                       # discovered → evaluated → applied → responded → interviewing → offer
-/jobe interview-prep <company>      # STAR+R story mapping + likely questions
-/jobe calibrate                     # weekly LLM-judge calibration (Cohen's kappa ≥ 0.75)
-/jobe audit                         # demographic bias audit (name × school perturbations)
+/jobe find                 # discover, dedup, rank, ghost-score; auto-evaluate top matches
+/jobe <posting-url>        # one-shot evaluation: A-G analysis + resume + cover letter
+/jobe batch url1 url2 ...  # evaluate many postings; per-JD bullet selection per resume
+/jobe apply-all            # paste-ready blocks (or --chrome for browser automation)
+/jobe tracker              # discovered -> evaluated -> applied -> responded -> offer
+/jobe interview-prep <co>  # STAR+R story mapping + likely questions
 ```
 
----
+## Table of contents
 
-## Why another job tool
-
-Most job-search tools optimize for volume (auto-apply to 200 roles) or for opinion (ChatGPT rewrites your resume). Jobe optimizes for **defensibility**: every score, every dedup, every tailoring decision is grounded in a documented method with a citation. You can argue with the output because you can see the mechanism.
-
-Concretely:
-
-- **Dedup** uses MinHash LSH (128 permutations, 18×7 bands, Jaccard ≥ 0.70 on bigram shingles) per [LSHBloom (arXiv 2411.04257)](https://arxiv.org/abs/2411.04257) and the datasketch library's production defaults. Not string similarity.
-- **Ranking** uses Reciprocal Rank Fusion with k=60 per [Bruch et al, ACM TOIS 2024](https://dl.acm.org/doi/10.1145/3654207), which empirically beats dense-only retrieval by +1.4% nDCG and BM25-only by +18% on BEIR/MS MARCO.
-- **Ghost-job detection** uses a max-pooled multi-signal model (age-vs-seniority, repost cadence, company hires-per-posting ratio, layoff proximity, title-fuzz) citing [Clarify Capital 2024 (n=1,200)](https://www.clarifycapital.com/job-listings-survey), [Revelio Labs 2024](https://www.revelio.com/), and [Hunter Ng arXiv 2410.21771](https://arxiv.org/abs/2410.21771).
-- **LLM-judge calibration** enforces a Cohen's kappa ≥ 0.75 gate against human adjudication per [arXiv 2506.13639 (2025)](https://arxiv.org/abs/2506.13639). If your judge and you disagree too often, the system flags it rather than pretending the labels are ground truth.
-- **Bias audit** runs 9 name × 7 school perturbations per [Bertrand & Mullainathan, AER 2004](https://www.aeaweb.org/articles?id=10.1257/0002828042002561) and [Brookings 2024](https://www.brookings.edu/articles/rethinking-the-impact-of-ai-on-hiring/). If your scorer varies by more than 15% across perturbations, it gets flagged.
-
-Unsourced numeric claims (earlier versions had floating "8.2% interview rate" / "2.5× callbacks" figures with no traceable methodology) have been removed from the prompt library.
+1. [What Jobe does](#what-jobe-does)
+2. [Quick start](#quick-start)
+3. [How it works](#how-it-works)
+4. [All 15 commands](#all-15-commands)
+5. [Configuration](#configuration)
+6. [Why Jobe (defensibility)](#why-jobe-defensibility)
+7. [Empirical backing](#empirical-backing)
+8. [FAQ](#faq)
+9. [Privacy and the data contract](#privacy-and-the-data-contract)
+10. [Contributing](#contributing)
+11. [License](#license)
 
 ---
 
-## Install
+## What Jobe does
 
-Jobe installs into your Claude Code directory (`~/.claude/skills/jobe/`) and its runtime to `~/.jobe/`.
+Jobe runs four loops over your job search:
+
+- **Discover.** Scans 12 job sources in parallel (ATS APIs + web search + HN) every time you run `/jobe find`. Dedupes with MinHash LSH, ranks with Reciprocal Rank Fusion, scores ghost-job risk with a multi-signal model, filters to remote-US (or whatever your `_profile.md` says).
+- **Evaluate.** For each posting that passes a gate-pass check, Jobe writes a tailored resume and cover letter. Bullet selection is per-JD: `lib/bullet-select.js` filters your bullet library by the posting's archetype, scores each remaining bullet against the JD's keywords, and picks the top N per role. No two resumes share identical body text.
+- **Apply.** Either prints paste-ready blocks for each application form (the default, fastest, no CAPTCHA risk), or drives Chrome via the `Claude in Chrome` extension. Always human-in-the-loop: it fills, shows what was filled, waits for your "submit" approval.
+- **Track.** A simple markdown tracker plus an apply queue, with conversion rates, follow-up cadences, and orphan detection.
+
+Jobe is **not** an auto-apply spambot and not a generic ChatGPT resume rewriter. Every claim it puts on a resume traces to a specific entry in your portfolio reference file. Every score traces to a documented method with a citation.
+
+---
+
+## Quick start
+
+### Prerequisites
+
+- [Claude Code](https://claude.com/claude-code) installed and signed in.
+- [Node.js](https://nodejs.org/) 20 or newer.
+- Git.
+- Optional but recommended: a free [Brave Search API key](https://api.search.brave.com) (2,000 queries / month, no card). Without it, discovery falls back to public ATS APIs and HN, which surfaces a few hundred postings per run instead of a few thousand.
+
+### Install
 
 ```bash
+# 1. Clone and install dependencies
 git clone https://github.com/montebelle/jobe-skill.git
 cd jobe-skill
+npm install
 
-# Install globally as a Claude Code skill
-mkdir -p ~/.claude/skills/jobe ~/.claude/agents ~/.jobe
+# 2. Wire it into Claude Code as a skill
+mkdir -p ~/.claude/skills/jobe ~/.claude/agents
 cp -r .claude/skills/jobe/* ~/.claude/skills/jobe/
 cp .claude/agents/jobe-*.md ~/.claude/agents/
-cp -r lib collectors scripts templates configs ~/.jobe/
-cp package.json ~/.jobe/
-cd ~/.jobe && npm install
 
-# Required: create your personal profile
-cp ~/.claude/skills/jobe/modes/_profile.template.md ~/.claude/skills/jobe/modes/_profile.md
-$EDITOR ~/.claude/skills/jobe/modes/_profile.md          # fill in name, contact, target roles
+# 3. Set up your personal layer (these files stay private to you)
+cp .claude/skills/jobe/modes/_profile.template.md .claude/skills/jobe/modes/_profile.md
+cp templates/reference.template.md       reference.md
+cp templates/resume-baseline.template.json data/resume-baseline.json
+cp templates/bullet-library.template.json  data/bullet-library.json
+cp templates/non-tech-seed.template.json   data/companies/non-tech-seed.json
 
-# Required: create your portfolio evidence file
-$EDITOR ~/.claude/skills/jobe/reference.md              # populate A1–A12 evidence (or your own domains)
+# 4. Add your API key (optional but recommended)
+cp .env.example .env
+# Open .env in your editor and paste BRAVE_API_KEY=...
 
-# Optional: enable broader discovery
-echo "SERPAPI_KEY=your_key_here" >> ~/.jobe/.env
+# 5. Edit the personal files
+$EDITOR .claude/skills/jobe/modes/_profile.md   # name, contact, target roles, locations
+$EDITOR reference.md                             # your portfolio evidence, project by project
+$EDITOR data/resume-baseline.json                # your work history (companies + dates)
+$EDITOR data/bullet-library.json                 # one bullet pool per role you've held
 ```
 
-Then in any Claude Code session, invoke `/jobe find` (or any other mode).
+### First run
 
----
+In any Claude Code session inside the cloned repo:
 
-## The 15 modes
-
-| Command | What it does |
-|---|---|
-| `/jobe find` | 8-source discovery (ATS APIs + web search + HN), dedup, rank, ghost-score, auto-generate resumes for top matches. |
-| `/jobe <URL>` | Evaluate one posting against A–G blocks. |
-| `/jobe <company> <role>` | Same, finds the posting first. |
-| `/jobe apply <slug>` | Fill one application via Chrome (human-in-the-loop). |
-| `/jobe apply-all` | Process entire apply queue; default paste-ready blocks, `--chrome` for automation. |
-| `/jobe apply-assisted` | Alias for the paste-ready mode. |
-| `/jobe batch url1 url2 …` | Evaluate multiple postings at once. |
-| `/jobe tracker` | Pipeline view + conversion rates + orphan check. |
-| `/jobe interview-prep <company>` | STAR+R story mapping + likely questions + company-specific prep. |
-| `/jobe followup` | Follow-up cadence (7d/1d/same-day) + draft messages. |
-| `/jobe patterns` | Analytics: conversion funnel, archetype performance, score thresholds. |
-| `/jobe contacto <company>` | LinkedIn outreach drafts (4 types: recruiter / HM / peer / interviewer, 300 chars). |
-| `/jobe deep <company>` | 6-axis company research (product / business / people / growth / risk / interview). |
-| `/jobe project <path>` | Evaluate a portfolio project for archetype fit + interview defensibility. |
-| `/jobe calibrate` | Weekly LLM-judge calibration loop (Cohen's kappa tracking). |
-| `/jobe audit` | Demographic bias audit over the scorer. |
-
----
-
-## A–G evaluation blocks
-
-Each evaluation produces seven structured outputs:
-
-| Block | Output |
-|---|---|
-| **A: Role Summary** | Archetype (AI Platform / Agentic / Applied ML / Causal / ML Infra / Forward Deployed) |
-| **B: Portfolio Match** | 3 parallel sub-agents (jd-analyzer, company-intel, competitor) scoring every requirement against evidence from `reference.md` |
-| **C: Positioning** | Gate-pass check + internal-only positioning strategy |
-| **D: Compensation** | Salary-range research |
-| **E: Resume + Cover Letter** | ATS-normalized DOCX (475–600 words, Calibri single-column), XYZ-formula bullets, achievement-first cover letter |
-| **F: Story Mapping** | STAR+R stories mapped to JD requirements (Strong / Partial / None) |
-| **G: Legitimacy** | Multi-signal ghost score → High Confidence / Proceed with Caution / Suspicious |
-
-Gate-pass rules: Required Skills ≥ 50% and Experience Level ≥ 0.7 must both pass before resume generation. If either fails, Jobe shows the breakdown and asks before proceeding.
-
----
-
-## 8-source discovery pipeline
-
-Every source is a plugin under `collectors/sources/` implementing the same contract:
-
-```js
-module.exports = {
-  id: 'source-id',
-  name: 'Human-Readable Name',
-  requires: ['ENV_VAR_NAME'],       // missing env vars → source returns []
-  rateLimit: { rpm: 60 },
-  async discover(ctx) { return [/* Posting[] */]; }
-};
+```
+/jobe find
 ```
 
-Sources ship in four categories:
+You'll see something like:
 
-- **Aggregators**: Brave Search (recommended free path: 2K queries/mo, set `BRAVE_API_KEY`), SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring. Brave + SerpAPI use a per-(domain × role) query fan-out (~80 queries / run) so specialty roles surface instead of being drowned by an OR-megaquery
-- **Company-specific**: Amazon public careers JSON, Apple SSR scrape
-- **ATS directories**: Ashby customer boards
-- **ATS direct**: Greenhouse, Lever, Workday (multi-tenant), SmartRecruiters (multi-company), iCIMS (best-effort HTML)
+```
+[19:00:05] sources loaded: brave-search, serpapi-google-jobs, ..., greenhouse-direct, lever-direct
+[19:00:05] slug-harvest: +68 new slugs across 21 queries (index: 822)
+[19:00:05] total raw: 2412
+[19:00:05] after dedup: 2157
+[19:00:05] after filter: 230 (rejected: role=528 recency=0 loc=275 non-remote=1042)
+[19:00:05] enriching top 211
+[19:00:05] done. wrote signals/discovered/2026-04-30
+```
 
-**Phase 0 — slug harvest**: before the parallel source loop, `lib/slug-harvest.js` issues 21 role-less Brave queries (`site:boards.greenhouse.io after:DATE`, `site:jobs.ashbyhq.com after:DATE`, etc.) to enumerate unknown ATS slugs into `data/companies/index.json`. Direct-ATS plugins re-read the index at discover-time, so the same run reaps the new slugs. The seed list becomes vestigial as the index grows.
+Jobe will then auto-evaluate the matches scoring above 80, list the 65-79 band for confirmation, and let you trigger evaluations on demand. Output for each posting goes to `reports/{slug}/`: a tailored resume DOCX, a cover-letter DOCX, and an analysis markdown. Each one is added to `data/apply-queue.json` for the next `/jobe apply-all` pass.
 
-**Phase 1 — discovery**: `pipeline.js` fans out all sources in parallel (rate-limited), normalizes into a canonical `Posting` schema, dedups three passes (URL exact → dedupKey sha1 → MinHash LSH fuzzy), updates the emergent `data/companies/index.json`, filters for recency / location / role.
+---
 
-**Phase 2 — broad enrichment + JD-driven scoring**: the title gate is a permissive ML-vocab regex + exclusion list (not a brittle whitelist). Every gate-passing posting (default cap 300) gets enriched with JD text + compensation extraction + 30-day cache, then `fullScore` runs on JD content. Pre-enrich `quickScore` only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost) — it does not gate.
+## How it works
 
-**Phase 3 — agent fallback**: the pipeline writes `discovery-summary.json` with a `needsAgentFallback` flag (true when Brave returned <100 OR merged set <300). The find mode reads it and conditionally launches the `jobe-job-discovery` agent (uses Claude Code's WebSearch tool, no API quota) for targeted recall on companies the search APIs missed. `lib/agent-import.js` extracts ATS slugs into the index, normalizes + filters + enriches + scores agent discoveries, and merges them into `ranked-enriched.json`.
+The discovery pipeline runs in four phases:
+
+### Phase 0: Slug harvest
+
+Before any role-keyword query runs, `lib/slug-harvest.js` issues 21 role-less Brave queries against each ATS domain (`site:boards.greenhouse.io after:DATE`, `site:jobs.ashbyhq.com after:DATE`, etc.) to enumerate company slugs Jobe doesn't yet know about. New slugs land in `data/companies/index.json` immediately, and the direct-ATS plugins re-read the index at discover-time, so the same run reaps them. Over weeks of use the seed list becomes vestigial — the index *becomes* the source of truth.
+
+### Phase 1: Discovery
+
+`collectors/pipeline.js` fans out 12 source plugins in parallel, rate-limited per source:
+
+| Category | Sources |
+|---|---|
+| Aggregators (keyword-driven, cross-platform) | Brave Search, SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring |
+| Company-specific | Amazon, Apple |
+| ATS directories | Ashby customer boards |
+| ATS direct (per-slug API) | Greenhouse, Lever, Workday, SmartRecruiters, iCIMS |
+
+Brave and SerpAPI use a per-(domain x role) query fan-out (~80 queries / run). One single-role query against a single ATS domain returns 20 highly-relevant URLs; OR-megaqueries return 20 generic ones dominated by the most common term. The split surfaces specialty roles that the megaquery drowned.
+
+Every source emits raw `Posting[]` in a canonical schema. `lib/dedup.js` then runs three passes:
+
+1. URL exact match.
+2. `dedupKey` sha1 over normalized (company-slug, role, location).
+3. MinHash LSH fuzzy match (128 perms, 18x7 bands, Jaccard >= 0.70 on bigram shingles).
+
+### Phase 2: Filter, enrich, score
+
+Filters apply: recency window (30 days, +15 for senior / staff per *Review of Accounting Studies 2023*), location (remote / US / hybrid based on `_profile.md`), role gate (a permissive ML-vocab regex plus an exclusion list — not a brittle whitelist of exact title strings), queue, negative list.
+
+Every gate-passing posting (default cap 300) gets enriched: JD text fetched, compensation extracted, 30-day cached. Then `fullScore` runs on JD content (50 baseline + signal-based deltas, clamped to [0, 100]). Pre-enrich `quickScore` only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost); it does not gate.
+
+### Phase 3: Agent fallback
+
+The pipeline writes `signals/discovered/{date}/discovery-summary.json` with a `needsAgentFallback` flag (true when Brave returned <100 OR merged set <300). The find mode reads it. If true, it launches the `jobe-job-discovery` agent, which uses Claude Code's built-in `WebSearch` tool (no API quota) to targetedly hunt slugs the search APIs missed. The agent writes structured JSON; `lib/agent-import.js` extracts ATS slugs into the index, normalizes + filters + enriches + scores those discoveries, and merges them into `ranked-enriched.json`.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 
 ---
 
-## Empirical backing (citations in code)
+## All 15 commands
 
-Every numerical claim traces to a paper or documented source. The core citations are embedded as code comments in the modules that use them:
-
-| Module | Citation |
+| Command | What it does |
 |---|---|
-| `lib/minhash.js`, `lib/dedup.js` | [LSHBloom arXiv 2411.04257 (2024)](https://arxiv.org/abs/2411.04257); datasketch library defaults |
-| `lib/rrf.js`, `lib/rank.js` | [Bruch et al ACM TOIS 2024](https://dl.acm.org/doi/10.1145/3654207): +1.4% nDCG over dense, +18% over BM25 on BEIR/MS MARCO |
-| `lib/ghost-score.js` | [Clarify Capital 2024 n=1,200](https://www.clarifycapital.com/job-listings-survey); [Revelio Labs 2024](https://www.revelio.com/); [Hunter Ng arXiv 2410.21771](https://arxiv.org/abs/2410.21771) |
-| `lib/calibration.js` | [arXiv 2506.13639 (2025)](https://arxiv.org/abs/2506.13639) — LLM-as-judge calibration |
-| `lib/bias-audit.js` | [Bertrand & Mullainathan AER 2004](https://www.aeaweb.org/articles?id=10.1257/0002828042002561); [Brookings 2024](https://www.brookings.edu/articles/rethinking-the-impact-of-ai-on-hiring/) |
-| `pipeline.js` (seniority recency) | Review of Accounting Studies 2023 on high-skill vacancy duration |
-| `modes/find.md` (referral priority) | [Burks et al QJE 2015](https://academic.oup.com/qje/article/130/2/805/2330903); [Friebel et al NBER 2019](https://www.nber.org/papers/w26395) |
-| `lib/tailoring.js` | Resume2Vec MDPI 2024 (+15.85% nDCG) as the strongest available anchor for tailoring-depth impact |
+| `/jobe find [filter]` | Phase 0-3 discovery; auto-evaluate matches above the strong threshold. Optional free-form filter (role / location / company). |
+| `/jobe <url>` | Evaluate one posting. Runs A-G blocks: role summary, portfolio match, positioning, comp, resume + cover letter, story mapping, legitimacy. |
+| `/jobe <company> <role>` | Same, finds the canonical posting URL first via WebSearch. |
+| `/jobe batch url1 url2 ...` | Evaluate many postings; cross-posting bullet differentiation enforced. |
+| `/jobe apply <slug>` | Fill one application via Chrome (human-in-the-loop). |
+| `/jobe apply-all` | Process the entire apply queue. Default: paste-ready blocks. `--chrome` for browser automation. |
+| `/jobe apply-assisted` | Alias for the paste-ready mode. |
+| `/jobe tracker` | Pipeline view, conversion rates, orphan check. |
+| `/jobe interview-prep <co>` | STAR+R story mapping plus likely questions plus company-specific prep. |
+| `/jobe followup` | Follow-up cadence (7d / 1d / same-day) and draft messages. |
+| `/jobe patterns` | Analytics: conversion funnel, archetype performance, score thresholds. |
+| `/jobe contacto <co>` | LinkedIn outreach drafts (recruiter / HM / peer / interviewer; 300 chars). |
+| `/jobe deep <co>` | 6-axis company research (product, business, people, growth, risk, interview signals). |
+| `/jobe project <path>` | Evaluate a portfolio project for archetype fit and interview defensibility. |
+| `/jobe calibrate` | Weekly LLM-judge calibration loop (Cohen's kappa tracking, threshold >= 0.75). |
+| `/jobe audit` | Demographic bias audit over the scorer (name x school perturbations). |
 
 ---
 
 ## Configuration
 
-### `configs/default.json`
-Template with candidate placeholder, scoring weights, match thresholds, and company tiers. Copy to `configs/local.json` (gitignored) for your own values.
+Five files drive Jobe's behavior. Two are templates, three are private to you.
 
-### `.claude/skills/jobe/modes/_profile.md`
-Your identity: name, contact, target roles, authorization status, portfolio domains. A template lives at `_profile.template.md`.
-
-### `.claude/skills/jobe/reference.md`
-Your portfolio evidence. Organize by domain (A1–A12 by default, or your own). Every resume bullet Jobe generates must trace back to a concrete entry here — that's the anti-fabrication guarantee.
-
-### `data/queries/seeds.json`
-Discovery seed queries. Each is a `{query, location, archetype}` tuple.
-
-### `data/companies/negative-list.json`
-Company slugs to exclude from discovery results.
-
-### `.env`
-API keys (SERPAPI_KEY optional, enables broader discovery).
-
----
-
-## Anti-fabrication guarantees
-
-1. **No bullet without evidence.** Every resume bullet must trace to a concrete entry in `reference.md`. If evidence is thin, the scorer returns weak-adjacency, not exact-match.
-2. **No internal project names in output.** Describe by function ("autonomous ML operations platform"), not by your internal codename.
-3. **ATS normalization.** `lib/normalize.js` strips em-dashes, smart quotes, and non-ASCII Unicode before every DOCX render, both for resumes and cover letters.
-4. **Content differentiation.** Cover letter, "Why company X?", and custom application questions must use different evidence and framing. Enforced by the apply modes.
-5. **Gate-pass before generation.** Required-skills coverage ≥ 50% and experience ≥ 0.7 before a resume is produced.
-
----
-
-## Data contract (what stays private)
-
-Two layers:
-
-| Layer | Files | Install behavior |
+| File | Purpose | Source |
 |---|---|---|
-| **User layer** (never overwritten) | `tracker.md`, `story-bank.md`, `followups.md`, `apply-queue.json`, `contacts.json`, `_profile.md`, `configs/local.json`, `.env`, `data/companies/index.json` (emergent), `reference.md` | Preserved on upgrade; install guarded with if-not-exists |
-| **System layer** (replaced on upgrade) | `SKILL.md`, `reference.md` (template only), `modes/*.md`, `lib/*.js`, `collectors/`, `scripts/`, `agents/`, `configs/default.json` | Overwritten; treat as code |
+| `.env` | API keys (Brave, SerpAPI, GitHub) | Copy from `.env.example` |
+| `.claude/skills/jobe/modes/_profile.md` | Your name, contact, target roles, target locations | Copy from `_profile.template.md` |
+| `reference.md` | Portfolio evidence (project by project) | Copy from `templates/reference.template.md` |
+| `data/resume-baseline.json` | Your canonical resume structure (companies, dates) | Copy from `templates/resume-baseline.template.json` |
+| `data/bullet-library.json` | Per-role bullet pool, archetype-tagged | Copy from `templates/bullet-library.template.json` |
 
-The included `.gitignore` keeps the user-layer files out of any git operation.
+The `companyKeyMap` in `bullet-library.json` is what bridges your `resume-baseline.json` `experience[].company` strings to the role-keys under which the bullet pools live. Get this mapping right and `lib/bullet-select.js` will never mix one role's bullets into another role's section.
 
-See [`DATA_CONTRACT.md`](DATA_CONTRACT.md) for the full list.
+Optional supporting files:
+
+- `data/companies/non-tech-seed.json` — initial Workday / SmartRecruiters / iCIMS tenants. Slug-harvest grows this automatically over time.
+- `data/queries/seeds.json` — seed queries (role + location pairs). Default covers tech + finance + healthcare + retail + energy + defense.
+- `data/companies/negative-list.json` — slugs you never want surfaced.
+
+---
+
+## Why Jobe (defensibility)
+
+Most job-search tools optimize for volume (auto-apply to 200 roles) or for opinion (ChatGPT rewrites your resume). Jobe optimizes for **defensibility**: every score, every dedup decision, every tailoring choice is grounded in a documented method with a citation. You can argue with the output because you can see the mechanism.
+
+Three concrete consequences:
+
+1. **No bullet without evidence.** Every resume bullet must trace to a concrete entry in your `reference.md`. Internal codenames are stripped at render. If evidence is thin, the scorer returns weak-adjacency, not exact-match.
+2. **No invented numbers.** Earlier prompt libraries floated figures like "8.2% interview rate" and "2.5x callbacks" with no traceable methodology. Those have been removed. The empirical claims that remain are cited inline in the modules that use them — see the next section.
+3. **Bias and calibration are observable.** `/jobe audit` perturbs candidate names and schools to surface scorer variance. `/jobe calibrate` enforces a Cohen's kappa >= 0.75 gate against your own human adjudication labels.
+
+---
+
+## Empirical backing
+
+Every numerical claim Jobe relies on is anchored in a citation embedded as a comment in the module that uses it.
+
+| Module | Method | Citation |
+|---|---|---|
+| `lib/minhash.js`, `lib/dedup.js` | MinHash LSH, 128 perms, 18x7 bands, Jaccard >= 0.70 on bigram shingles | [LSHBloom (arXiv 2411.04257, 2024)](https://arxiv.org/abs/2411.04257) + datasketch defaults |
+| `lib/rrf.js`, `lib/rank.js` | Reciprocal Rank Fusion, k=60 | [Bruch et al, ACM TOIS 2024](https://dl.acm.org/doi/10.1145/3654207). +1.4% nDCG over dense, +18% over BM25 on BEIR / MS MARCO |
+| `lib/ghost-score.js` | Multi-signal ghost-job model (max-pooled) | [Clarify Capital 2024 n=1,200](https://www.clarifycapital.com/job-listings-survey); [Revelio Labs 2024](https://www.revelio.com/); [Hunter Ng (arXiv 2410.21771)](https://arxiv.org/abs/2410.21771) |
+| `pipeline.js` | Seniority-aware recency (+15 days for senior / staff IC) | *Review of Accounting Studies* 2023 on high-skill vacancy duration |
+| `lib/calibration.js` | LLM-as-judge calibration vs human, Cohen's kappa >= 0.75 | [arXiv 2506.13639 (2025)](https://arxiv.org/abs/2506.13639) |
+| `lib/bias-audit.js` | Name x school perturbation bias audit | [Bertrand & Mullainathan (AER 2004)](https://www.aeaweb.org/articles?id=10.1257/0002828042002561); [Brookings 2024](https://www.brookings.edu/articles/rethinking-the-impact-of-ai-on-hiring/) |
+| `modes/find.md` | Referral-first ordering | [Burks et al (QJE 2015)](https://academic.oup.com/qje/article/130/2/805/2330903); [Friebel et al (NBER 2019)](https://www.nber.org/papers/w26395) |
+| `lib/tailoring.js` | Per-JD tailoring depth | Resume2Vec MDPI 2024 (+15.85% nDCG) as the strongest available anchor |
+
+---
+
+## FAQ
+
+### Do I need an API key?
+
+No, but recall is much higher with one. Without any key, Jobe runs the public-API and HTML-scraping sources (Greenhouse, Lever, Ashby, Amazon, Apple, HN) and surfaces a few hundred postings per run. With a free Brave API key it surfaces a few thousand and harvests new ATS slugs into `data/companies/index.json` automatically.
+
+### What if a posting I want isn't in any of the indexed ATS?
+
+Two paths. (1) Run `/jobe <posting-url>` directly with the URL of the LinkedIn / Indeed / company-careers listing — Jobe will fetch, parse, and evaluate it without going through discovery. (2) The agent fallback layer (`jobe-job-discovery`) is exactly for this: it uses Claude's built-in WebSearch to targetedly find ATS URLs for companies the search APIs missed. It fires automatically when discovery recall is low.
+
+### How does Jobe avoid hallucinating bullets?
+
+Bullets are not LLM-generated at evaluate-time. They are pre-written by you in `data/bullet-library.json`, tagged with archetypes and keywords, and *selected* (not generated) per posting by `lib/bullet-select.js`. The selector filters by archetype intersection, scores by keyword overlap against the JD, and returns the top N. The cover letter *is* LLM-composed, but it draws only from the same library — the rules in `modes/_shared.md` enforce a quality bar (specific dollar amount + leadership signal + decision-grade outcome) so the LLM has no room to invent.
+
+### Can I use Jobe for non-ML / non-AI roles?
+
+The framework is general — it doesn't hardcode ML as the target domain. But two pieces are tuned for ML / AI / Data Science:
+
+- The role gate (`lib/rank.js` `ML_VOCAB`) filters titles by ML-vocab keywords. Edit it to broaden.
+- The 6 archetypes (AI Platform / Agentic / Applied ML / Causal / ML Infrastructure / Forward Deployed) are ML-themed. Replace them in `lib/archetypes.js` with archetypes for your field, then retag your bullet library accordingly.
+
+If you do this, please open a PR — having multiple field configurations in the repo would be a community win.
+
+### How do I update Jobe?
+
+```bash
+cd jobe-skill
+git pull
+cp -r .claude/skills/jobe/* ~/.claude/skills/jobe/    # overwrites system-layer files
+cp .claude/agents/jobe-*.md ~/.claude/agents/
+npm install                                            # if dependencies changed
+```
+
+The user-layer files (`_profile.md`, `reference.md`, `tracker.md`, `data/bullet-library.json`, `.env`, etc.) are never touched. See [`DATA_CONTRACT.md`](DATA_CONTRACT.md).
+
+### My run is slow / hitting rate limits.
+
+The pipeline rate-limits each source (per `s.rateLimit.rpm`). The Brave free tier is 1 query / second, which adds ~80 seconds for the role fan-out plus ~25 seconds for slug-harvest. SerpAPI's free tier is 100 queries / month total — disable it with `--source` or remove the key if you're not on a paid plan. To skip enrichment for a fast triage run: `node collectors/pipeline.js --no-enrich`.
+
+---
+
+## Privacy and the data contract
+
+Two layers, with strict separation:
+
+| Layer | Files | Behavior |
+|---|---|---|
+| **User layer** (yours, never touched by upgrade) | `_profile.md`, `reference.md`, `tracker.md`, `story-bank.md`, `followups.md`, `apply-queue.json`, `contacts.json`, `.env`, `data/resume-baseline.json`, `data/bullet-library.json`, `data/companies/index.json`, `data/companies/negative-list.json`, `data/companies/non-tech-seed.json` | Preserved on every upgrade |
+| **System layer** (replaced on upgrade) | `SKILL.md`, `modes/*.md` (except `_profile.md`), `lib/*.js`, `collectors/*`, `scripts/*`, `agents/*`, `configs/default.json`, `templates/*` | Treated as code, overwritten |
+
+The included `.gitignore` keeps user-layer files out of any git operation, so accidental `git add -A` won't leak `.env` or your tracker.
+
+See [`DATA_CONTRACT.md`](DATA_CONTRACT.md) for the full file-by-file list and rationale.
+
+---
+
+## Contributing
+
+Issues and PRs welcome. The natural extension points:
+
+- **A new source plugin.** Add `collectors/sources/<category>/<source>.js` exporting `{id, name, requires, rateLimit, discover(ctx)}`. Missing env vars in `requires` cause the source to return `[]` so the pipeline keeps working without your key.
+- **A new mode.** Add `.claude/skills/jobe/modes/<mode>.md` and update the router table in `SKILL.md`.
+- **A new archetype set** for non-ML fields (security engineering, design, product management). Touch `lib/archetypes.js`, the archetype detection heuristics in `modes/_shared.md`, and update `templates/bullet-library.template.json`.
+- **A new agent.** Add `.claude/agents/jobe-<purpose>.md` defining its system prompt and allowed tools.
+
+Run `npm test` before submitting. CI checks formatting (`prettier --check`) and lint (`eslint`).
 
 ---
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
-
-## Contributing
-
-Issues and PRs welcome. Source plugins are a natural extension point: add a new file under `collectors/sources/<category>/` implementing the `{id, name, requires, rateLimit, discover}` contract.
+[MIT](LICENSE).

@@ -1,0 +1,29 @@
+{
+  "_comment": "Verified Workday tenant slugs, SmartRecruiters company slugs, and iCIMS hosts. Add or remove entries to bias non-tech industry coverage. Each value is a human-readable name; the keys are the URL-slugs the ATS plugins iterate. Slug-harvest (lib/slug-harvest.js) will grow data/companies/index.json with newly-discovered tenants automatically — this file is just the starting set.",
+
+  "workday": {
+    "geico": "GEICO",
+    "td": "TD Bank",
+    "manulife": "Manulife",
+    "centricsoftware": "Centric Software",
+    "thomsonreuters": "Thomson Reuters",
+    "wgu": "Western Governors University",
+    "servicetitan": "ServiceTitan",
+    "guidehouse": "Guidehouse",
+    "zillow": "Zillow",
+    "salesforce": "Salesforce",
+    "adobe": "Adobe",
+    "nvidia": "NVIDIA",
+    "workday": "Workday Inc."
+  },
+
+  "smartrecruiters": {
+    "Bosch": "Bosch",
+    "Siemens": "Siemens",
+    "Visa": "Visa"
+  },
+
+  "icims": {
+    "careers-steampunk": "Steampunk"
+  }
+}
