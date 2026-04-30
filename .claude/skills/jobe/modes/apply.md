@@ -127,9 +127,13 @@ Use mcp__Claude_in_Chrome__computer with action "left_click" on the submit butto
 
 After submission:
 1. Take a confirmation screenshot
-2. Update tracker: change status from "Evaluated" to "Applied"
-3. Add entry to `data/followups.md` with next follow-up date (7 days from now)
-4. Report success to user
+2. Update tracker: change status from "Evaluated" to "Applied" via `updateTrackerStatus({ slug, newStatus: 'Applied' })` from `lib/tracker-writer.js`
+3. Update queue: `updateQueueEntry(slug, { applied: true, appliedDate: TODAY })`
+4. Add entry to `data/followups.md` with next follow-up date (7 days from now)
+5. **Move report folder**: `moveReportFolder(slug, 'applied')` from `lib/tracker-writer.js` relocates `reports/{slug}/` -> `reports/applied/{slug}/` and rewrites the queue's resumeDocx + coverLetterDocx paths and the tracker.md reportDir column atomically.
+6. Report success to user
+
+If user skipped instead of submitting: `updateQueueEntry(slug, { skipped: true, skipReason })` + `updateTrackerStatus({ slug, newStatus: 'Skipped' })` + `moveReportFolder(slug, 'skipped')`.
 
 ## Step 7: Handle Edge Cases
 

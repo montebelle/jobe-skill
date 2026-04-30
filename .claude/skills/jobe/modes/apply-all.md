@@ -49,7 +49,13 @@ Proceeding in 3 seconds... (type "skip" to skip this one)
 - Update `data/apply-queue.json`: set `applied: true`, `appliedDate: {today}`
 - Update `data/tracker.md`: change status from "Evaluated" to "Applied"
 - Add entry to `data/followups.md` with 7-day follow-up date
+- **Move report folder**: call `moveReportFolder(slug, 'applied')` from `lib/tracker-writer.js` to relocate `reports/{slug}/` → `reports/applied/{slug}/`. The helper rewrites the queue's `resumeDocx` + `coverLetterDocx` paths and tracker.md `reportDir` column atomically.
 - Report: "Applied to {company} - {role}. {remaining} left in queue."
+
+### Step C-skip: After Skip
+- Update `data/apply-queue.json`: set `skipped: true`, `skipReason: ...`
+- Update `data/tracker.md`: change status to "Skipped"
+- **Move report folder**: call `moveReportFolder(slug, 'skipped')` to relocate `reports/{slug}/` → `reports/skipped/{slug}/`
 
 ### Step D: Next
 Immediately proceed to the next role in the queue. No need to re-type any commands.

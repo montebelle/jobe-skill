@@ -79,11 +79,35 @@ Report: estimated base, total comp, equity, level calibration, negotiation lever
 
 ## Block E: Resume + Cover Letter Generation
 
+**Step 0 (REQUIRED — Build experience + selectedProjects via bullet-select):**
+
+Use `lib/bullet-select.js` `buildExperience()` and `pickProjects()` to select per-JD bullets and projects from `data/bullet-library.json`. Do NOT hand-author bullets and do NOT reorder a fixed pool — that produces resumes interchangeable in body content.
+
+```js
+const { buildExperience, pickProjects } = require('./lib/bullet-select');
+const baseline = require('./data/resume-baseline.json');
+const spec = {
+  archetype: '<from Block A archetype detection>',
+  jdText: '<raw JD text from this posting>',
+  bulletCounts: { current: 4, prior1: 2, prior2: 2, prior3: 1 }, // keys must match your bullet-library role-keys
+  pinBullets: [],     // optional must-include bullet IDs
+  excludeBullets: []  // optional skip IDs
+};
+resume.experience = buildExperience(baseline, spec);
+resume.selectedProjects = pickProjects(spec, 2);
+```
+
+If the bullet library lacks evidence for a JD-specific archetype need, ADD a new entry to `data/bullet-library.json` (with `id`, `archetypes[]`, `keywords[]`, `text`) before generating the resume. Never invent evidence at resume-generation time.
+
+**Then apply the rest of the Block E rules:**
+
 **CRITICAL RULES**:
-- NEVER use your internal project names in generated output. Describe by function: "autonomous ML operations platform", "competitive intelligence system", "outfit recommendation platform".
-- Every bullet must go DEEP into what was technically built, not just name-drop. Bad: "Built multi-model orchestration system." Good: "Architected multi-model LLM routing with automatic fallback across 3 model tiers, reducing per-query inference costs 40% by dispatching routine tasks to a smaller model while preserving output quality for complex planning decisions across 9 production applications."
-- Use the DEEP technical details from reference.md. The reference has specific algorithms, parameter values, architectural decisions. Use them.
+- NEVER use your internal project names in generated output. Describe by function: "autonomous ML operations platform", "competitive intelligence system", "outfit recommendation platform". (The bullet library should already enforce this in its text content.)
+- Every bullet must go DEEP into what was technically built, not just name-drop. The bullet library should be pre-written to this depth; do not paraphrase it down.
+- Use the DEEP technical details from your portfolio evidence. Specific algorithms, parameter values, architectural decisions — use them.
 - No "Talebian", "barbell", "antifragile", "emergence", or "inversion" in any output.
+- **Attribution check before rendering**: every bullet under an `experience[i]` entry must trace to a real artifact under that employer. Side-project / consultancy work belongs in its own experience entry or in `selectedProjects`, NEVER mixed into a different employer's bullets. See `_shared.md` Bullet Selection > Attribution Rules.
+- **Cover letter must include**: (1) one specific dollar amount or measurable business outcome, (2) one leadership/scope signal, (3) one decision-grade outcome. See `_shared.md` Cover Letter Quality Bar.
 
 Generate the tailored resume following ALL rules from _shared.md:
 - ATS format rules (single column, Calibri, 475-600 words, 70%+ keyword match)

@@ -178,3 +178,76 @@ Document the combinations of skills in your own profile that are uncommon at the
 4. Causal Inference at Scale
 5. Cross-Domain Breadth
 6. Applied Math Foundation
+
+---
+
+## Bullet Selection (REQUIRED for Resume Generation)
+
+For every resume generated (single-posting via `/jobe [url]`, multi-posting via `/jobe batch`, or auto-evaluate from `/jobe find`), bullets MUST be selected from `data/bullet-library.json` via `lib/bullet-select.js`. Do not hand-author bullets and do not use the deprecated "fixed integer-permutation" pattern.
+
+### Why
+Reordering a fixed bullet pool produces resumes interchangeable in body content; only summary + cover letter end up unique. Per-JD bullet text variation requires a tagged library and per-spec selection.
+
+### How
+
+```js
+const { buildExperience, pickProjects } = require('./lib/bullet-select');
+const baseline = require('./data/resume-baseline.json');
+const spec = {
+  archetype: '<from Block A archetype detection>',
+  jdText: '<raw JD text from posting>',
+  // bulletCounts keys must match role-keys in your bullet-library.json
+  bulletCounts: { current: 4, prior1: 2, prior2: 2, prior3: 1 },
+  pinBullets: [],     // optional must-include bullet IDs
+  excludeBullets: [], // optional skip IDs
+};
+resume.experience = buildExperience(baseline, spec);
+resume.selectedProjects = pickProjects(spec, 2);
+```
+
+`buildExperience` walks each baseline experience entry, resolves `company` to a library role-key (via `library.companyKeyMap` declared in your `bullet-library.json`, optionally overridden by `spec.companyKeyMap`, with `companySlug(company)` fallback), filters that role's bullet pool by archetype, scores remaining by JD-keyword overlap, and returns the top N. `pickProjects` does the same against the library's `selectedProjects` array.
+
+### Bullet library structure
+
+Your `data/bullet-library.json` must have shape:
+
+```json
+{
+  "companyKeyMap": {
+    "Acme Corp": "current",
+    "Previous Co": "prior1"
+  },
+  "current": [
+    {
+      "id": "current-causal-survival",
+      "archetypes": ["Causal", "Applied ML"],
+      "keywords": ["survival", "hazard ratio", "ROAS", "propensity"],
+      "text": "Shipped a 33M-user discrete-time complementary log-log survival model..."
+    }
+  ],
+  "prior1": [...],
+  "selectedProjects": [...]
+}
+```
+
+Each bullet should be pre-written at the depth you want it to appear in the resume. The selector picks; it does not paraphrase.
+
+### Attribution Rules (Define in your own _profile.md and bullet library)
+
+For every employer in your `data/resume-baseline.json` `experience[]`, the bullet library must contain only claims that trace to actual repos / artifacts under that employer. Do not let bullets from one role's repos surface under another role's section. The `companyKeyMap` is the gate — get it right and the selector will not mix attributions.
+
+If you have a side-consultancy / parallel project that overlaps with your day job, declare each separately in the experience array AND keep the bullet pools strictly disjoint. The single biggest failure mode for tailored resumes is mis-attributing side-project work to the day job.
+
+### Cover Letter Quality Bar
+
+Every cover letter MUST contain at minimum:
+
+1. **One specific dollar amount or measurable business outcome**: e.g., "$2M+ quarterly savings", "33M users", "MDE 7.5% at 80% power".
+2. **One leadership / scope signal**: e.g., "led 8 reports across 5 clients", "founder of multi-client AI-automation consultancy", "lead the production ML stack across 4 divisions".
+3. **One decision-grade outcome**: an outcome that materially changed how the business allocates resources, runs experiments, or makes a build/buy/scale decision.
+
+If a cover letter draft fails any of these three checks, it is incomplete. Regenerate with explicit business-impact and leadership content from the bullet library.
+
+### Selected Projects Rendering
+
+`scripts/render-docx.js` `buildSelectedProjects(projects)` renders the Selected Projects section between Experience and Skills when `resume.selectedProjects` is a non-empty array. Old-format resume JSONs without `selectedProjects` field render unchanged (backwards-compatible).

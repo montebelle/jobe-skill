@@ -23,7 +23,7 @@ for (const entry of sample) {
 "
 ```
 
-Then for each entry, ask the user to label true/false on whether the LLM was right. Feed back with:
+Then for each entry, ask the user (John) to label true/false on whether the LLM was right. Feed back with:
 
 ```bash
 node -e "require('./lib/calibration').recordHumanAdjudication('<id>', <true|false>, '<optional note>')"

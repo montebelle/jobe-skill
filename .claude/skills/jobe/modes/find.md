@@ -10,17 +10,26 @@ quick-ranks on title/URL, enriches top-K with JD text, and produces a
 fully ranked list.
 
 **Sources** (in `collectors/sources/`):
-- `aggregators/serpapi-google-jobs.js` - Google Jobs via SerpAPI (primary)
-- `aggregators/serpapi-site-search.js` - site: search across ATS + company + startup domains
-- `aggregators/hn-who-is-hiring.js` - HN monthly thread
-- `company-specific/amazon-jobs.js` - Amazon public search
-- `company-specific/apple-jobs.js` - Apple SSR scrape
-- `ats-directories/ashby-directory.js` - Ashby customer boards
-- `ats-direct/greenhouse.js` - Greenhouse slug-based
-- `ats-direct/lever.js` - Lever slug-based
 
-Sources gate themselves on `requires` env vars (e.g. `SERPAPI_KEY`). Missing
-env means the source returns `[]`; the pipeline continues.
+Keyword-driven cross-platform aggregators (preferred — search every job by keyword without naming companies):
+- `aggregators/brave-search.js` - **Recommended free path**: Brave Search API site-scoped queries across all ATS domains. 2,000 queries/month free (no card). Set `BRAVE_API_KEY` in `.env`.
+- `aggregators/serpapi-google-jobs.js` - Google Jobs via SerpAPI (paid: 100/mo free, $50/mo for 5K). Set `SERPAPI_KEY` in `.env`.
+- `aggregators/serpapi-site-search.js` - SerpAPI site: search across ATS + company + startup domains (same key).
+- `aggregators/hn-who-is-hiring.js` - HN monthly "Who is hiring" thread.
+
+ATS-direct slug iteration (always runs; grows the emergent company index):
+- `company-specific/amazon-jobs.js` - Amazon public search.
+- `company-specific/apple-jobs.js` - Apple SSR scrape.
+- `ats-directories/ashby-directory.js` - Ashby customer boards.
+- `ats-direct/greenhouse.js` - Greenhouse slug-based.
+- `ats-direct/lever.js` - Lever slug-based.
+- `ats-direct/workday.js` - Workday multi-tenant (per `data/companies/non-tech-seed.json`).
+- `ats-direct/smartrecruiters.js` - SmartRecruiters multi-company.
+- `ats-direct/icims.js` - iCIMS best-effort HTML scrape.
+
+Sources gate themselves on `requires` env vars (e.g. `BRAVE_API_KEY`, `SERPAPI_KEY`). Missing env means the source returns `[]`; the pipeline continues with remaining sources.
+
+**Recommended setup**: add `BRAVE_API_KEY` to `.env` (free, 2K queries/month) for keyword-driven discovery across all customers of every ATS, not just the seeded ones. Without any aggregator key, recall is limited to the slug seed lists.
 
 ## Input
 
@@ -44,6 +53,7 @@ Options:
 - `--max-enrich N` - cap enrichment to N top-scored postings (default 60)
 - `--max-age N` - override recency window (default 30 days)
 - `--no-us-only` - allow non-US roles
+- `--allow-onsite` - **disable the default remote-only filter** (per `_profile.md`, hybrid + onsite are excluded by default; this flag opens the gate)
 
 Pipeline output (in `signals/discovered/{date}/`):
 - `raw-{source}.json` per source
@@ -85,18 +95,57 @@ node collectors/pipeline.js --query "Senior MLE" --location "Remote" --max-enric
 
 Currently pipeline reads seed queries from `data/queries/seeds.json`; `--query` / `--location` overrides override the seeds for this run only.
 
-## Step 2.6: Tier-3 fallback agent
+## Step 2.6: WebSearch agent fallback (auto-triggered when recall is low)
 
-If ALL HTTP sources return 0 (SerpAPI key missing AND HN + Amazon + Apple + Ashby + Greenhouse + Lever all timeout), launch the `jobe-job-discovery` agent with the seed queries. This is a last-resort WebSearch-based path, slower and noisier than the pipeline, but non-zero recall.
+After the pipeline writes `discovery-summary.json`, read it and decide whether to launch the `jobe-job-discovery` agent. The summary's `needsAgentFallback` boolean is the canonical trigger:
+
+```bash
+TODAY=$(date +%Y-%m-%d)
+SUMMARY="signals/discovered/${TODAY}/discovery-summary.json"
+node -e "const s=require('./${SUMMARY}'); console.log(JSON.stringify({needs:s.needsAgentFallback, reason:s.fallbackReason, brave:s.perSource['brave-search']||0, dedup:s.afterDedup}))"
+```
+
+**Auto-launch conditions** (any one is sufficient):
+- `summary.needsAgentFallback === true` (Brave returned <100 OR merged set <300).
+- Both `BRAVE_API_KEY` and `SERPAPI_KEY` are unset.
+- All HTTP sources returned 0.
+- User explicitly asks for broader sweep.
+
+**Skip the agent** when Brave alone returned >= 200 postings and merged set >= 500 — the marginal recall isn't worth the WebSearch cost.
+
+### Launch
+
+Use the Agent tool with subagent_type `jobe-job-discovery`. The agent prompt should include:
 
 ```
-Launch jobe-job-discovery agent with:
-  targetRoles: {from _profile.md}
-  targetLocations: {from _profile.md}
-  archetypeHints: {from data/queries/seeds.json archetype field}
+targetRoles: {from _profile.md target roles list}
+targetLocations: Remote (US) only — hard filter from _profile.md
+remoteOnly: true
+maxAgeDays: 30
+TODAY: {today's date YYYY-MM-DD}
+outputPath: signals/discovered/{TODAY}/agent-discovered.json
 ```
 
-Do NOT launch the agent if any source returned >= 5 postings; it duplicates work.
+The agent writes `agent-discovered.json` itself (per its instructions). Do not parse markdown — read the JSON file.
+
+### Merge agent output into the ranked list
+
+After the agent finishes:
+
+```bash
+node lib/agent-import.js
+```
+
+This script:
+- extracts ATS slugs from each agent URL and merges them into `data/companies/index.json` (so the next run iterates them via direct ATS plugins).
+- normalizes postings via `lib/posting.createPosting`.
+- applies the same role / remote / US filters as the pipeline.
+- dedups against today's existing `ranked-enriched.json` (URL exact).
+- appends survivors to `ranked-enriched.json`, sorted by score.
+
+It prints a JSON summary with `added`, `newSlugs`, `indexSize`. Re-read `ranked-enriched.json` after import and present the combined list.
+
+**Why this design**: the agent path is a one-shot recall booster; once it discovers a slug, that slug lives in `index.json` permanently and the direct-ATS plugins (Greenhouse / Lever / Ashby / Workday) iterate it on every future run. Over time the seed-list dependency disappears entirely — the index becomes the source of truth.
 
 ## Step 3: Referral-First Suggestion (empirical priority)
 
@@ -153,7 +202,7 @@ seed to cover every company that has posted an ML role we surfaced.
 
 ## Negative List
 
-`data/companies/negative-list.json` contains slugs the user does not want to see.
+`data/companies/negative-list.json` contains slugs John does not want to see.
 The pipeline filters them out before presenting results.
 
 ## Failure Modes
