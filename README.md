@@ -65,28 +65,31 @@ npm install
 mkdir -p ~/.claude/skills/jobe ~/.claude/agents
 cp -r .claude/skills/jobe/* ~/.claude/skills/jobe/
 cp .claude/agents/jobe-*.md ~/.claude/agents/
-
-# 3. Set up your personal layer (these files stay private to you)
-cp .claude/skills/jobe/modes/_profile.template.md .claude/skills/jobe/modes/_profile.md
-cp templates/reference.template.md       reference.md
-cp templates/resume-baseline.template.json data/resume-baseline.json
-cp templates/bullet-library.template.json  data/bullet-library.json
-cp templates/non-tech-seed.template.json   data/companies/non-tech-seed.json
-
-# 4. Add your API key (optional but recommended)
-cp .env.example .env
-# Open .env in your editor and paste BRAVE_API_KEY=...
-
-# 5. Edit the personal files
-$EDITOR .claude/skills/jobe/modes/_profile.md   # name, contact, target roles, locations
-$EDITOR reference.md                             # your portfolio evidence, project by project
-$EDITOR data/resume-baseline.json                # your work history (companies + dates)
-$EDITOR data/bullet-library.json                 # one bullet pool per role you've held
 ```
 
-### First run
+### Onboard (15-30 minutes, guided)
 
 In any Claude Code session inside the cloned repo:
+
+```
+/jobe onboard
+```
+
+This is a guided interview that produces every personal file Jobe needs — `_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, and `.env`. You answer questions in plain English (paste your existing resume up front to skip half the steps); Jobe writes the files for you.
+
+The interview has 7 steps:
+
+1. **Identity** — name, contact, target roles, target locations, work auth, salary floor.
+2. **Resume baseline** — paste your current resume OR walk through your work history. Jobe parses into the canonical structure.
+3. **Portfolio evidence** — 5-10 projects, with specifics (algorithms, parameter values, scale numbers, outcomes, failure modes addressed). This is the source-of-truth for everything Jobe puts on a resume.
+4. **Bullet library** — Jobe drafts 4-8 candidate bullets per role from your project descriptions; you accept / edit / regenerate / discard each one. Keys auto-mapped from your work history.
+5. **API keys** (optional) — Brave Search recommended (free, 2K queries / month, no card).
+6. **Preferences** — companies to exclude, industries to deprioritize.
+7. **Smoke test** — small discovery + one end-to-end evaluation so you see a tailored resume + cover letter come out before you trust the rest.
+
+You can re-run any single step later with `/jobe onboard profile`, `/jobe onboard resume`, `/jobe onboard evidence`, or `/jobe onboard keys`.
+
+### First real run
 
 ```
 /jobe find
@@ -149,10 +152,11 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 
 ---
 
-## All 15 commands
+## All commands
 
 | Command | What it does |
 |---|---|
+| `/jobe onboard` | **Run this first.** Guided 7-step interview that produces every personal file Jobe needs (`_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, `.env`). 15-30 min. Re-runnable per-section. |
 | `/jobe find [filter]` | Phase 0-3 discovery; auto-evaluate matches above the strong threshold. Optional free-form filter (role / location / company). |
 | `/jobe <url>` | Evaluate one posting. Runs A-G blocks: role summary, portfolio match, positioning, comp, resume + cover letter, story mapping, legitimacy. |
 | `/jobe <company> <role>` | Same, finds the canonical posting URL first via WebSearch. |
@@ -224,6 +228,10 @@ Every numerical claim Jobe relies on is anchored in a citation embedded as a com
 ---
 
 ## FAQ
+
+### How do I get started?
+
+Run `/jobe onboard` from inside the cloned repo. It walks you through everything in plain English — no JSON to write, no schema to learn. Paste your existing resume up front and most of the work is done. After the interview you'll have a working setup with at least one tailored resume + cover letter generated end-to-end so you know it works before you trust it on real applications.
 
 ### Do I need an API key?
 

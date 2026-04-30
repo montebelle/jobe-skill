@@ -1,12 +1,12 @@
 ---
 name: jobe
 description: >
-  Career intelligence skill with 15 modes: evaluate (tailored resume + cover letter),
-  find (job discovery via 8-source pipeline), batch (multi-job), tracker (pipeline),
-  interview-prep, followup, patterns (analytics), contacto (outreach),
-  deep (company research), project (portfolio eval), calibrate, audit.
+  Career intelligence skill: onboard (guided setup interview), evaluate (tailored
+  resume + cover letter), find (12-source discovery pipeline), batch (multi-job),
+  tracker (pipeline), interview-prep, followup, patterns (analytics), contacto
+  (outreach), deep (company research), project (portfolio eval), calibrate, audit.
 user-invocable: true
-argument-hint: "find [role/location] | [URL] | batch [urls] | tracker | interview-prep | followup | patterns | contacto | deep | project | calibrate | audit"
+argument-hint: "onboard | find [role/location] | [URL] | batch [urls] | tracker | interview-prep | followup | patterns | contacto | deep | project | calibrate | audit"
 allowed-tools: "Bash Read Write Edit Glob Grep Agent WebSearch WebFetch"
 effort: high
 ---
@@ -14,6 +14,10 @@ effort: high
 # Jobe: Career Intelligence
 
 The user provided: `$ARGUMENTS`
+
+## Step 0: First-run check
+
+If `_profile.md` does not exist (or is still the unedited template), `data/resume-baseline.json` does not exist, and `data/bullet-library.json` does not exist — Jobe is unconfigured. Tell the user "Looks like Jobe hasn't been set up yet. Run `/jobe onboard` to walk through the 7-step interview that produces every personal file Jobe needs (15-30 min)." and stop. Do not try to run other modes against missing config.
 
 ## Step 1: Load shared context
 
@@ -41,7 +45,8 @@ Parse `$ARGUMENTS`:
 
 | First Word | Mode File | What It Does |
 |---|---|---|
-| `find`, `search`, `discover`, `jobs` | `modes/find.md` | Discover jobs via 8-source pipeline (ATS APIs + SerpAPI + HN + company sites) |
+| `onboard`, `init`, `setup`, `start` | `modes/onboard.md` | Guided 7-step interview that produces every personal file Jobe needs. Run this once after install. |
+| `find`, `search`, `discover`, `jobs` | `modes/find.md` | Discover jobs via 12-source pipeline (Brave + SerpAPI + HN + Amazon + Apple + Ashby + Greenhouse + Lever + Workday + SmartRecruiters + iCIMS) |
 | `tracker`, `pipeline`, `status` | `modes/tracker.md` | View application pipeline with stats |
 | `batch` | `modes/batch.md` | Process multiple postings |
 | `interview-prep`, `interview`, `prep` | `modes/interview-prep.md` | Prepare for interviews with story mapping |
