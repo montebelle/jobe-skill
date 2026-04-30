@@ -72,24 +72,47 @@ function dateCutoff(maxAgeDays) {
   return d.toISOString().slice(0, 10);
 }
 
+// Per-(domain, role) fan-out, same shape as brave-search.js. SerpAPI free
+// tier is 100/month so we use a smaller pattern set than Brave; users on
+// paid plans can still benefit from the extra recall without hitting limits.
+const SERP_ROLE_PATTERNS = [
+  '"senior machine learning engineer"',
+  '"staff machine learning engineer"',
+  '"senior data scientist"',
+  '"senior ai engineer"',
+];
+const SERP_FALLBACK_OR = '"machine learning engineer" OR "ai engineer" OR "data scientist" OR "applied scientist"';
+
+function siteClauseFor(domain) {
+  if (domain.raw) return `site:${domain.raw}`;
+  const [host, ...rest] = domain.site.split('/');
+  return rest.length ? `site:${host} inurl:${rest.join('/')}` : `site:${host}`;
+}
+
 function buildSiteQueries(queries, filters) {
   const afterClause = filters.maxAgeDays ? ` after:${dateCutoff(filters.maxAgeDays)}` : '';
   const out = [];
+  const locations = [...new Set(queries.map(q => q.location).filter(Boolean))];
+  const remoteHint = filters.remoteOnly ? ' remote' : '';
 
-  const roleTerms = [...new Set(queries.map(q => `"${q.query}"`))].join(' OR ');
-
-  for (const domain of [...ATS_DOMAINS, ...COMPANY_SITES, ...STARTUP_SITES]) {
-    const siteClause = domain.raw
-      ? `site:${domain.raw}`
-      : `site:${domain.site.split('/')[0]}${domain.site.includes('/') ? ` inurl:${domain.site.split('/').slice(1).join('/')}` : ''}`;
-    // Split by location to keep query size manageable
-    for (const loc of new Set(queries.map(q => q.location).filter(Boolean))) {
+  for (const domain of ATS_DOMAINS) {
+    const site = siteClauseFor(domain);
+    for (const role of SERP_ROLE_PATTERNS) {
       out.push({
-        query: `${siteClause} (${roleTerms}) "${loc}"${afterClause}`,
+        query: `${site} ${role}${remoteHint}${afterClause}`,
         domain,
-        location: loc,
+        location: filters.remoteOnly ? 'Remote' : (locations[0] || ''),
       });
     }
+  }
+
+  for (const domain of [...COMPANY_SITES, ...STARTUP_SITES]) {
+    const site = siteClauseFor(domain);
+    out.push({
+      query: `${site} (${SERP_FALLBACK_OR})${remoteHint}${afterClause}`,
+      domain,
+      location: filters.remoteOnly ? 'Remote' : (locations[0] || ''),
+    });
   }
   return out;
 }

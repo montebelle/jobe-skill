@@ -31,6 +31,7 @@ const { ghostScore } = require('../lib/ghost-score');
 const { mergeIntoIndex } = require('../lib/tracker-stats');
 const { atomicWrite } = require('../lib/tracker-writer');
 const { createLimiter } = require('../lib/rate-limiter');
+const { harvestSlugs } = require('../lib/slug-harvest');
 
 loadEnv();
 
@@ -160,7 +161,7 @@ function applyFilters(postings, filters) {
   const baseDays = filters.maxAgeDays || 30;
   const seniorDays = baseDays + (filters.seniorityExtensionDays ?? 15);
   const out = [];
-  const rejected = { recency: 0, location: 0, role: 0, queue: 0, negative: 0 };
+  const rejected = { recency: 0, location: 0, role: 0, queue: 0, negative: 0, nonRemote: 0 };
 
   for (const p of postings) {
     // Role
@@ -170,8 +171,17 @@ function applyFilters(postings, filters) {
     // Queue
     const urls = [p.canonicalUrl, ...p.alternateUrls];
     if (urls.some(u => queueUrls.has(u))) { rejected.queue++; continue; }
-    // Location
+    // Location: US-only
     if (filters.usOnly && p.us === false) { rejected.location++; continue; }
+    // Location: remote-only — hard filter per _profile.md. STRICT.
+    // Only postings with explicit remote === 'remote' pass.
+    // 'hybrid', 'onsite', AND 'unknown' (which covers ambiguous "United
+    // States" / "Multiple Locations" / "City, State" patterns that are
+    // almost always onsite in practice) are all rejected.
+    // For the rare unknown-but-actually-remote case, the user can override
+    // with --allow-onsite (which disables this filter entirely) or evaluate
+    // the specific URL via /jobe [url].
+    if (filters.remoteOnly && p.remote !== 'remote') { rejected.nonRemote++; continue; }
     // Recency: apply seniority-aware cutoff (keep if date unknown)
     if (p.postedDate && baseDays > 0) {
       const useDays = seniorRe.test(p.title) ? seniorDays : baseDays;
@@ -198,12 +208,14 @@ async function run(opts = {}) {
   const log = mkLogger('pipeline ');
   const filters = {
     usOnly: true,
+    remoteOnly: true,  // hard filter per _profile.md; override with --allow-onsite
     maxAgeDays: 30,
     ...opts.filters,
   };
 
   const auth = {
     serpApiKey: process.env.SERPAPI_KEY || null,
+    braveApiKey: process.env.BRAVE_API_KEY || null,
   };
 
   const queries = opts.queries || loadSeedQueries();
@@ -222,6 +234,24 @@ async function run(opts = {}) {
     log.info(`tracker-stats: merged ${statsCount} companies into index`);
   } catch (err) {
     log.warn(`tracker-stats failed (non-fatal): ${err.message}`);
+  }
+
+  // ── Phase 0: harvest unknown ATS slugs from Brave so the direct-ATS
+  // plugins iterate them in the same run. This is what makes the seed list
+  // vestigial — every role-less site:greenhouse.io / site:lever.co /
+  // site:ashbyhq.com query surfaces companies the role-targeted queries miss
+  // (they sit past Brave's top-20 ranking window). ──
+  if (!opts.noHarvest) {
+    try {
+      const harvest = await harvestSlugs({
+        apiKey: auth.braveApiKey,
+        maxAgeDays: filters.maxAgeDays,
+        logger: mkLogger('slug-harvest '),
+      });
+      log.info(`slug-harvest: +${harvest.harvested} new slugs across ${harvest.queriesRun} queries (index: ${harvest.indexSize})`);
+    } catch (err) {
+      log.warn(`slug-harvest failed (non-fatal): ${err.message}`);
+    }
   }
 
   // ── Discover (parallel, rate-limited per source) ──
@@ -257,7 +287,7 @@ async function run(opts = {}) {
 
   // ── Filter ──
   const { kept, rejected } = applyFilters(deduped, filters);
-  log.info(`after filter: ${kept.length} (rejected: role=${rejected.role} recency=${rejected.recency} loc=${rejected.location} queue=${rejected.queue} negative=${rejected.negative})`);
+  log.info(`after filter: ${kept.length} (rejected: role=${rejected.role} recency=${rejected.recency} loc=${rejected.location} non-remote=${rejected.nonRemote} queue=${rejected.queue} negative=${rejected.negative})`);
   persist(deduped, 'merged');
   persist({ filters, rejected, kept: kept.length }, 'filter-report');
 
@@ -289,12 +319,17 @@ async function run(opts = {}) {
     log.info(`skip enrich; ranked ${shownKept.length}`);
     return shownKept;
   }
-  const maxEnrich = opts.maxEnrich || 60;
+  // Enrich broadly; the title gate already kept the right candidates.
+  // 300 covers ~all postings that pass filters today (~219). HTTP fetches
+  // are cheap and 30-day cached, so the cost of enriching widely is low.
+  const maxEnrich = opts.maxEnrich || 300;
   const topK = shownKept.slice(0, maxEnrich);
   log.info(`enriching top ${topK.length}`);
   await Promise.all(topK.map(p => enrich(p).catch(err => { log.warn(`enrich ${p.canonicalUrl} failed: ${err.message}`); return p; })));
 
-  // ── Full rank (refresh RRF with jd text present) ──
+  // ── Full rank. Every enriched posting that has any JD text — whether
+  // from full enrichment or a fallback search-result snippet pre-attached
+  // by brave/serpapi — gets a real matchScore. ──
   for (const p of topK) {
     if (p.jdText) fullScore(p);
   }
@@ -304,7 +339,29 @@ async function run(opts = {}) {
   persist(shownKept, 'ranked-all');
   persist(topK, 'ranked-enriched');
 
+  // ── Discovery summary (consumed by modes/find.md to decide whether to
+  // launch the WebSearch-agent fallback) ──
+  const perSource = {};
+  for (let i = 0; i < sources.length; i++) {
+    if (results[i].status === 'fulfilled') perSource[sources[i].id] = (results[i].value || []).length;
+  }
+  const summary = {
+    date: TODAY,
+    perSource,
+    totalRaw: raw.length,
+    afterDedup: deduped.length,
+    afterFilter: kept.length,
+    enriched: topK.length,
+    rejected,
+    needsAgentFallback: (perSource['brave-search'] || 0) < 100 || deduped.length < 300,
+    fallbackReason: ((perSource['brave-search'] || 0) < 100)
+      ? `brave-search returned ${perSource['brave-search'] || 0} < 100`
+      : (deduped.length < 300 ? `merged set ${deduped.length} < 300` : null),
+  };
+  persist(summary, 'discovery-summary');
+
   log.info(`done. wrote ${OUT_DIR}`);
+  if (summary.needsAgentFallback) log.info(`recall low (${summary.fallbackReason}); mode should launch jobe-job-discovery agent`);
   return topK;
 }
 
@@ -327,7 +384,9 @@ function parseArgs() {
     else if (a === '--max-enrich') opts.maxEnrich = parseInt(args[++i], 10);
     else if (a === '--max-age') opts.filters.maxAgeDays = parseInt(args[++i], 10);
     else if (a === '--no-us-only') opts.filters.usOnly = false;
+    else if (a === '--allow-onsite') opts.filters.remoteOnly = false;
     else if (a === '--show-ghosts') opts.showGhosts = true;
+    else if (a === '--no-harvest') opts.noHarvest = true;
     else if (a === '--senior-extension') opts.filters.seniorityExtensionDays = parseInt(args[++i], 10);
     else if (a === '--query') { opts.queries = opts.queries || []; opts.queries.push({ query: args[++i], location: opts.filters.__pendingLocation || 'Remote' }); }
     else if (a === '--location') {
