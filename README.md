@@ -118,12 +118,18 @@ module.exports = {
 
 Sources ship in four categories:
 
-- **Aggregators**: SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring
+- **Aggregators**: Brave Search (recommended free path: 2K queries/mo, set `BRAVE_API_KEY`), SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring. Brave + SerpAPI use a per-(domain × role) query fan-out (~80 queries / run) so specialty roles surface instead of being drowned by an OR-megaquery
 - **Company-specific**: Amazon public careers JSON, Apple SSR scrape
 - **ATS directories**: Ashby customer boards
-- **ATS direct**: Greenhouse by slug, Lever by slug
+- **ATS direct**: Greenhouse, Lever, Workday (multi-tenant), SmartRecruiters (multi-company), iCIMS (best-effort HTML)
 
-`pipeline.js` fans out all sources in parallel (rate-limited), normalizes into a canonical `Posting` schema, dedups three passes (URL exact → dedupKey sha1 → MinHash LSH fuzzy), updates the emergent `data/companies/index.json`, filters for recency / location / role, quick-ranks, lazily enriches the top-K (default 60) with JD text + compensation extraction + 30-day cache, full-ranks with JD-aware scoring + ghost detection + archetype detection, then persists per-run outputs under `signals/discovered/{date}/`.
+**Phase 0 — slug harvest**: before the parallel source loop, `lib/slug-harvest.js` issues 21 role-less Brave queries (`site:boards.greenhouse.io after:DATE`, `site:jobs.ashbyhq.com after:DATE`, etc.) to enumerate unknown ATS slugs into `data/companies/index.json`. Direct-ATS plugins re-read the index at discover-time, so the same run reaps the new slugs. The seed list becomes vestigial as the index grows.
+
+**Phase 1 — discovery**: `pipeline.js` fans out all sources in parallel (rate-limited), normalizes into a canonical `Posting` schema, dedups three passes (URL exact → dedupKey sha1 → MinHash LSH fuzzy), updates the emergent `data/companies/index.json`, filters for recency / location / role.
+
+**Phase 2 — broad enrichment + JD-driven scoring**: the title gate is a permissive ML-vocab regex + exclusion list (not a brittle whitelist). Every gate-passing posting (default cap 300) gets enriched with JD text + compensation extraction + 30-day cache, then `fullScore` runs on JD content. Pre-enrich `quickScore` only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost) — it does not gate.
+
+**Phase 3 — agent fallback**: the pipeline writes `discovery-summary.json` with a `needsAgentFallback` flag (true when Brave returned <100 OR merged set <300). The find mode reads it and conditionally launches the `jobe-job-discovery` agent (uses Claude Code's WebSearch tool, no API quota) for targeted recall on companies the search APIs missed. `lib/agent-import.js` extracts ATS slugs into the index, normalizes + filters + enriches + scores agent discoveries, and merges them into `ranked-enriched.json`.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 

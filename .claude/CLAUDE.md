@@ -24,21 +24,24 @@ Full-pipeline job search automation: discover, evaluate, apply, track, follow up
 - `SKILL.md` is a 57-line router. Reads `modes/_shared.md` + `modes/_profile.md` + the appropriate mode file.
 - 15 mode files in `modes/` (13 workflow modes + 2 shared context files)
 - 4 agents: jd-analyzer, company-intel, competitor, job-discovery
-- `lib/` modules: config (env loader with repo + ~/.jobe fallback), scoring, portfolio, tracker, normalize (ATS chars), sync-check, archetypes, patterns, snapshot, **posting (canonical Posting schema + parsers)**, **minhash (MinHash + LSH, pure JS)**, **dedup (URL exact + dedupKey + MinHash LSH fuzzy)**, **rrf (Reciprocal Rank Fusion k=60)**, **rank (quickScore + fullScore + fuseRanking via RRF)**, **enrich (JD fetch + 30-day cache)**, **ghost-score (multi-signal: age, repost, company-ratio, layoff, title-fuzz)**, **calibration (LLM-judge + human, Cohen's kappa)**, **bias-audit (name/school perturbation)**, **tailoring (generic/light/deep depth tracking)**
-- `collectors/pipeline.js` orchestrates the unified discovery pipeline
-- `collectors/sources/` is a source-plugin registry. Each plugin exports `{id, name, requires, discover}`:
-  - `aggregators/` - SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring
+- `lib/` modules: config (env loader with repo + `~/.jobe` fallback), scoring, portfolio, tracker, normalize (ATS chars), sync-check, archetypes, patterns, snapshot, **posting (canonical Posting schema + parsers)**, **minhash (MinHash + LSH, pure JS)**, **dedup (URL exact + dedupKey + MinHash LSH fuzzy)**, **rrf (Reciprocal Rank Fusion k=60)**, **rank (permissive ML-vocab title gate + seniority-and-freshness enrichment-priority + JD-content fullScore via RRF)**, **enrich (JD fetch + 30-day cache, with extractors for Greenhouse / Lever / Ashby / Workday / SmartRecruiters)**, **ghost-score (multi-signal: age, repost, company-ratio, layoff, title-fuzz)**, **calibration (LLM-judge + human, Cohen's kappa)**, **bias-audit (name/school perturbation)**, **tailoring (generic/light/deep depth tracking)**, **bullet-select (per-JD bullet selection from `data/bullet-library.json` filtered by archetype, scored by JD-keyword overlap, returning experience[] + selectedProjects[] ready for resume JSON)**, **slug-harvest (role-less Brave queries that enumerate unknown ATS slugs into the index before each run, making the seed list vestigial)**, **agent-import (merges WebSearch-agent fallback discoveries into the pipeline output: extracts ATS slugs into `data/companies/index.json`, normalizes, filters, enriches, fullScores, dedups, updates in place)**, **tracker-writer (atomic-write tracker.md + apply-queue.json mutations, plus `moveReportFolder` helper for `reports/{slug}` -> `reports/{applied|skipped}/{slug}` relocation)**
+- `collectors/pipeline.js` orchestrates the unified discovery pipeline. Phase 0 = slug-harvest, phase 1 = parallel sources, phase 2 = filter + enrich (top 300) + score, phase 3 = persist + write `discovery-summary.json` with `needsAgentFallback` boolean
+- `collectors/sources/` is a source-plugin registry. Each plugin exports `{id, name, requires, rateLimit, discover(ctx) -> Posting[]}`:
+  - `aggregators/` - **Brave Search (recommended free path: 2K queries/mo, set `BRAVE_API_KEY`)**, SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring. Brave + SerpAPI use a per-(domain x role) query fan-out (~80 queries / run) instead of a single OR-megaquery, so specialty roles surface instead of being drowned under common terms
   - `company-specific/` - Amazon (public JSON), Apple (SSR scrape)
   - `ats-directories/` - Ashby customer boards
-  - `ats-direct/` - Greenhouse, Lever by known slug
-- `data/queries/seeds.json` - seed queries driving discovery (role + location pairs)
-- `data/companies/index.json` - emergent company index, auto-grown from every run
+  - `ats-direct/` - Greenhouse, Lever, **Workday (multi-tenant)**, **SmartRecruiters (multi-company)**, **iCIMS (best-effort HTML scrape)**
+- `data/queries/seeds.json` - seed queries driving discovery (role + location pairs; covers tech + finance + pharma + retail + CPG + media + auto + telecom + energy + healthcare + insurance + defense)
+- `data/companies/index.json` - emergent company index, auto-grown from every run + slug-harvest phase
 - `data/companies/negative-list.json` - slugs to exclude
-- `signals/discovered/{date}/` - per-run raw, merged, ranked, enriched outputs
+- `data/companies/non-tech-seed.json` - verified Workday tenants + SmartRecruiters companies + iCIMS hosts for non-tech industry coverage
+- `data/resume-baseline.json` - canonical resume structure (your own experience entries)
+- `data/bullet-library.json` - per-role bullet pool with optional top-level `companyKeyMap`; each bullet tagged with `archetypes[]` and `keywords[]` for per-JD selection via `lib/bullet-select.js`
+- `signals/discovered/{date}/` - per-run raw, merged, ranked, enriched, **discovery-summary** outputs
 - `signals/cache/jd/` - 30-day JD cache (sha1-keyed)
-- `scripts/` renders DOCX resumes + cover letters, both with ATS normalization via normalize()
+- `scripts/` renders DOCX resumes + cover letters with ATS normalization, plus `bulk-resume-from-list.js` for fast triage runs over many URLs
 - `data/` tracker, story-bank, followups, apply-queue
-- `reports/{company-slug}/` per-job output
+- `reports/applied/{slug}/` and `reports/skipped/{slug}/` per-job output (relocated by `moveReportFolder()` after apply or skip)
 
 ## Key Design Decisions
 - Modes beat a long prompt: 15 files vs one monolith
@@ -50,7 +53,11 @@ Full-pipeline job search automation: discover, evaluate, apply, track, follow up
 - **Discovery is query-driven, not company-driven.** The pipeline asks "what jobs in the market match the candidate?" not "what is new at this fixed watchlist?". The company whitelist (portals.json) is now a seed for the emergent company index (data/companies/index.json), not the primary source of truth.
 - **Source plugin contract**: every file under collectors/sources/ exports `{id, name, requires, rateLimit, discover(ctx)}`. Missing env vars (listed in `requires`) cause the source to return `[]`; pipeline continues with remaining sources.
 - **Dedup is downstream, not upstream.** Every source emits raw Posting[]; canonical schema in lib/posting.js normalizes, lib/dedup.js merges URL-exact then fuzzy on (company-slug, role-normalized, location-primary) sha1.
-- **Enrichment is lazy.** Top-K (default 60) ranked postings get JD text fetched + comp extracted + 30-day cached. Rest skip enrich for speed.
+- **Enrichment is broad, scoring is JD-driven.** Top-K (default 300, was 60) gate-passing postings get JD text fetched + comp extracted + 30-day cached. The title gate is a permissive ML-vocab regex + exclusion list, not a brittle whitelist of exact phrases. JD-content fullScore decides ranking; the pre-enrich quickScore only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost).
+- **Slug-harvest before discovery.** Phase 0 issues 21 role-less Brave queries (`site:boards.greenhouse.io after:DATE`, etc.) to enumerate unknown ATS slugs into `data/companies/index.json` before the parallel source loop runs. Direct-ATS plugins re-read the index at discover-time, so the same run reaps the new slugs. Over time the seed list becomes irrelevant — the index becomes the source of truth.
+- **Bullet selection per JD (required for resume generation).** `lib/bullet-select.js` `buildExperience(baseline, spec)` + `pickProjects(spec, n)` filter `data/bullet-library.json` by archetype, score remaining bullets by JD-keyword overlap, and return ordered bullet/project arrays. Reordering a fixed bullet pool produces resumes that share identical body content across postings (only summary + cover letter differ); per-JD selection produces real differentiation.
+- **WebSearch agent fallback.** When `discovery-summary.json.needsAgentFallback` is true (Brave returned <100 OR merged set <300), the find mode launches the `jobe-job-discovery` agent which uses Claude Code's WebSearch tool (no API quota) to targetedly hunt slugs the search APIs missed. The agent writes `signals/discovered/{date}/agent-discovered.json`; `lib/agent-import.js` extracts slugs into the index, normalizes + filters + enriches + scores, and merges into `ranked-enriched.json`.
+- **Cover letter quality bar.** Every cover letter must contain (1) a specific dollar amount or measurable business outcome, (2) one leadership / scope signal, (3) one decision-grade outcome. The `_shared.md` Cover Letter section enforces this. Bulk-resume helper (`scripts/bulk-resume-from-list.js`) ships resume DOCX with `coverLetter` blank for follow-up composition.
 - **Empirical backing (citations in lib/ modules):**
   - MinHash LSH fuzzy dedup (lib/minhash.js, lib/dedup.js): LSHBloom arXiv 2411.04257 (2024); datasketch defaults (128 perms, 18x7 bands, Jaccard >= 0.70 with bigram shingles).
   - RRF hybrid-ranking k=60 (lib/rrf.js, lib/rank.js): Bruch et al ACM TOIS 2024; +1.4% nDCG over dense, +18% over BM25 on BEIR/MS MARCO.
