@@ -42,6 +42,17 @@ Jobe runs four loops over your job search:
 
 Jobe is **not** an auto-apply spambot and not a generic ChatGPT resume rewriter. Every claim it puts on a resume traces to a specific entry in your portfolio reference file. Every score traces to a documented method with a citation.
 
+### Optional: a self-hosted dashboard (`web/`)
+
+A Next.js dashboard ships in `web/` for visualizing the pipeline locally. Pipeline overview with a typographic funnel, queue management with keyboard shortcuts (`j`/`k` navigate, `a` apply, `s` skip), per-posting detail pages with resume + cover letter previews, analytics, and the latest discovery run. Reads from your local filesystem; nothing leaves the machine.
+
+```bash
+npm run web:install   # one-time
+npm run dev           # http://localhost:3000
+```
+
+See [`web/README.md`](web/README.md) for the full feature tour.
+
 ---
 
 ## Quick start
