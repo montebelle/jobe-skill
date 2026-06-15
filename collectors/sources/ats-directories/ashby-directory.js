@@ -17,6 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'ashby-directory';
 
@@ -50,10 +51,6 @@ async function fetchBoard(slug) {
   return res.json();
 }
 
-function isMlRole(title) {
-  return /\b(machine learning|ml engineer|ai engineer|applied scien|research engineer|research scien|data scien|mlops|llm|genai|deep learning|computer vision|nlp|member of technical staff)\b/i.test(title || '');
-}
-
 // Fold Ashby's structured workplace signal into the location string so the
 // canonical classifier (which keys off location/title text) classifies remote
 // correctly instead of inferring from a bare city.
@@ -69,6 +66,7 @@ function ashbyLocation(j) {
 
 async function discover(ctx) {
   const { logger } = ctx;
+  const titleOk = makeTitleMatcher(ctx);
   const slugs = new Set([...loadKnownSlugs()]);
 
   // Merge slugs from the company index if present
@@ -85,7 +83,7 @@ async function discover(ctx) {
       const data = await fetchBoard(slug);
       if (!data || !data.jobs) continue;
       for (const j of data.jobs) {
-        if (!isMlRole(j.title)) continue;
+        if (!titleOk(j.title)) continue;
         const comp = extractAshbyComp(j);
         const url = j.jobUrl || `https://jobs.ashbyhq.com/${slug}/${j.id}`;
         const p = createPosting({
@@ -113,7 +111,7 @@ async function discover(ctx) {
     }
   }
 
-  logger.info(`[${ID}] collected ${all.length} Ashby ML postings`);
+  logger.info(`[${ID}] collected ${all.length} Ashby postings`);
   return all;
 }
 

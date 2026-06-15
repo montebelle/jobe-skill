@@ -24,7 +24,7 @@ const path = require('path');
 const { loadEnv, getProjectRoot } = require('../lib/config');
 const { createPosting } = require('../lib/posting');
 const { dedup } = require('../lib/dedup');
-const { quickScore, isRoleMatch } = require('../lib/rank');
+const { buildProfile, quickScore, isRoleMatch } = require('../lib/rank');
 
 loadEnv();
 const ROOT = getProjectRoot();
@@ -66,9 +66,10 @@ function main() {
   }
 
   const merged = dedup(normalized);
-  for (const p of merged) quickScore(p); // mutates p.quickScore in place
+  const profile = buildProfile({ root: ROOT });
+  for (const p of merged) quickScore(p, { profile }); // mutates p.quickScore in place
 
-  const roleMatched = merged.filter(p => isRoleMatch(p.title));
+  const roleMatched = merged.filter(p => isRoleMatch(p.title, profile));
   roleMatched.sort((a, b) => (b.quickScore || 0) - (a.quickScore || 0));
   const top = roleMatched.slice(0, opts.top);
 

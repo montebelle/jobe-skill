@@ -12,6 +12,7 @@
 
 const { createPosting } = require('../../../lib/posting');
 const { textClean } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'hn-who-is-hiring';
 const AUTHOR = 'whoishiring';
@@ -74,15 +75,13 @@ function parseComment(text, threadId) {
   };
 }
 
-function isMlRole(title, text) {
-  const combined = `${title} ${text}`.toLowerCase();
-  return /\b(machine learning|ml engineer|ai engineer|applied scientist|ml research|nlp|data scientist|deep learning|llm|genai|ml infra|mlops|computer vision)\b/.test(combined);
-}
-
 // ── discover ────────────────────────────────────────────────
 
 async function discover(ctx) {
   const { logger } = ctx;
+  // Match each free-form HN comment (title + body) against the user's target
+  // roles. Permissive when unconfigured.
+  const titleOk = makeTitleMatcher(ctx);
 
   const all = [];
   try {
@@ -96,7 +95,7 @@ async function discover(ctx) {
           if (!node) return;
           if (node.text) {
             const parsed = parseComment(node.text, thread.objectID);
-            if (parsed && isMlRole(parsed.title, parsed.jdText)) {
+            if (parsed && titleOk(`${parsed.title} ${parsed.jdText}`)) {
               const posting = createPosting({
                 ...parsed,
                 postedDate: new Date(thread.createdAt * 1000).toISOString(),

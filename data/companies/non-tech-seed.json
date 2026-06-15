@@ -1,0 +1,6 @@
+{
+  "$schema": "Workday tenants + SmartRecruiters companies + iCIMS hosts for the Workday/SmartRecruiters/iCIMS sources to scan. These ATSes have no cross-company search, so each employer is listed explicitly -- this is how Jobe reaches employers (in any industry) that don't use Greenhouse/Lever/Ashby. EMPTY by default: Jobe ships no curated employer list. Add your target employers, or let `/jobe onboard` collect them. Shapes: workday { host, tenant, site, company, industry }; smartrecruiters { companyId, company, industry }; icims { host, company, industry }.",
+  "workday": [],
+  "smartrecruiters": [],
+  "icims": []
+}

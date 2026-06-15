@@ -18,15 +18,11 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'jsearch';
 
-const ROLE_QUERIES = [
-  'senior machine learning engineer in united states',
-  'staff machine learning engineer in united states',
-  'senior ai engineer in united states',
-  'senior data scientist in united states',
-];
+const MAX_ROLES = 4; // free-tier quota is tight; roles come from the user's seeds
 
 function datePostedParam(maxAgeDays) {
   if (maxAgeDays <= 1) return 'today';
@@ -78,9 +74,11 @@ async function discover(ctx) {
   if (!apiKey) { logger.warn(`[${ID}] skipped: no JSEARCH_API_KEY`); return []; }
 
   const maxAgeDays = filters.maxAgeDays || 30;
+  const roles = roleStrings(ctx, { max: MAX_ROLES }).map(r => `${r} in united states`);
+  if (!roles.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
   const all = [];
 
-  for (const q of ROLE_QUERIES) {
+  for (const q of roles) {
     try {
       const rows = await fetchQuery(q, apiKey, maxAgeDays, filters.remoteOnly !== false);
       for (const d of rows) {

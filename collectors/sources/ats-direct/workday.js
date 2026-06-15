@@ -21,19 +21,9 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { roleStrings, makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'workday';
-const ML_KEYWORDS = [
-  'machine learning',
-  'artificial intelligence',
-  'data scientist',
-  'ai engineer',
-  'mlops',
-  'deep learning',
-  'quantitative researcher',
-  'generative ai'
-];
-const ML_REGEX = /\b(machine learning|ml engineer|ai engineer|applied scien|research engineer|research scien|data scien|mlops|llm|genai|deep learning|computer vision|nlp|quantitative research|quantitative analyst|advanced analytics|principal data|computational biolog|bioinformatic|member of technical staff)\b/i;
 
 function loadTenants() {
   const p = path.join(getProjectRoot(), 'data/companies/non-tech-seed.json');
@@ -78,18 +68,18 @@ function buildUrl(tenant, job) {
 }
 
 async function discover(ctx) {
-  const { queries, logger } = ctx;
+  const { logger } = ctx;
   const tenants = loadTenants();
   if (tenants.length === 0) {
     logger.info(`[${ID}] no Workday tenants seeded (data/companies/non-tech-seed.json); skipping`);
     return [];
   }
+  const titleOk = makeTitleMatcher(ctx);
+  // Search terms come from the user's seed roles. Cap to keep request volume sane.
+  const terms = roleStrings(ctx, { max: 3 });
+  if (!terms.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
 
   logger.info(`[${ID}] scanning ${tenants.length} Workday tenants`);
-
-  // Workday returns generous match sets on each search; broad terms beat
-  // specific ones. Cap at 3 terms per tenant to keep request volume sane.
-  const terms = ['machine learning', 'data scientist', 'artificial intelligence'];
 
   const all = [];
   const seenUrls = new Set();
@@ -103,7 +93,7 @@ async function discover(ctx) {
         if (!data || !Array.isArray(data.jobPostings)) continue;
         totalSeen += data.jobPostings.length;
         for (const j of data.jobPostings) {
-          if (!ML_REGEX.test(j.title || '')) continue;
+          if (!titleOk(j.title || '')) continue;
           const url = buildUrl(tenant, j);
           if (!url || seenUrls.has(url)) continue;
           seenUrls.add(url);
@@ -127,7 +117,7 @@ async function discover(ctx) {
       }
     }
     if (tenantFound > 0) {
-      logger.info(`[${ID}] ${tenant.tenant} (${tenant.industry || '?'}) -> ${tenantFound} ML roles (scanned ${totalSeen})`);
+      logger.info(`[${ID}] ${tenant.tenant} (${tenant.industry || '?'}) -> ${tenantFound} roles (scanned ${totalSeen})`);
     }
   }
   return all;

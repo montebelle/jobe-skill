@@ -15,20 +15,14 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { roleStrings, makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'remotive';
 
-// Compact role sweep. Remotive search is broad-match; a few umbrella terms
-// out-recall many narrow ones and keep us polite on their API.
-const ROLE_QUERIES = [
-  'machine learning',
-  'data scientist',
-  'ai engineer',
-];
-
-// Remotive's `search` matches descriptions too (sales roles surface for
-// "ai engineer"), so titles are re-filtered locally before normalization.
-const TITLE_MATCH = /\b(machine[\s-]*learning|ml engineer|mlops|deep learning|llm|data scien|applied scientist|artificial intelligence|ai engineer|ai\/ml|ml\/ai)\b/i;
+// Roles come from the user's seeds. Remotive's `search` matches descriptions
+// too (off-target roles surface), so titles are re-filtered locally against the
+// same target roles before normalization. Cap to stay polite on their API.
+const MAX_ROLES = 5;
 
 function stripHtml(html) {
   return (html || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
@@ -55,14 +49,17 @@ async function fetchJobs(search) {
 async function discover(ctx) {
   const { filters, logger } = ctx;
   const maxAgeDays = filters.maxAgeDays || 30;
+  const roles = roleStrings(ctx, { max: MAX_ROLES });
+  if (!roles.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
+  const titleOk = makeTitleMatcher(ctx);
   const all = [];
 
-  for (const q of ROLE_QUERIES) {
+  for (const q of roles) {
     try {
       const jobs = await fetchJobs(q);
       let kept = 0;
       for (const j of jobs) {
-        if (!TITLE_MATCH.test(j.title || '')) continue;
+        if (!titleOk(j.title || '')) continue;
         if (!withinAge(j.publication_date, maxAgeDays)) continue;
         // candidate_required_location drives US classification downstream:
         // "Remote - USA Only" parses as remote+us; "Remote - Europe" gets

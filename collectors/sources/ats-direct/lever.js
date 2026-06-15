@@ -10,9 +10,9 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting, stripHtml } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'lever-direct';
-const ML_REGEX = /\b(machine learning|ml engineer|data scien|ai engineer|llm|genai|gen ai|deep learning|nlp|computer vision|causal|forecast|recommendation|applied scientist|research engineer|mlops|member of technical staff)\b/i;
 
 function loadSlugs(ctx) {
   const s = new Set();
@@ -55,6 +55,7 @@ function leverLocation(j) {
 
 async function discover(ctx) {
   const { logger } = ctx;
+  const titleOk = makeTitleMatcher(ctx);
   const slugs = loadSlugs(ctx);
   logger.info(`[${ID}] scanning ${slugs.length} Lever boards`);
 
@@ -64,7 +65,7 @@ async function discover(ctx) {
       const jobs = await fetchBoard(slug);
       if (!jobs || !Array.isArray(jobs)) continue;
       for (const j of jobs) {
-        if (!ML_REGEX.test(j.text)) continue;
+        if (!titleOk(j.text)) continue;
         const p = createPosting({
           title: j.text,
           company: slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),

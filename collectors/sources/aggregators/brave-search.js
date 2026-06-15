@@ -24,31 +24,16 @@ const { createPosting } = require('../../../lib/posting');
 const {
   ATS_DOMAINS, COMPANY_SITES, STARTUP_SITES
 } = require('./serpapi-site-search');
+const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'brave-search';
 
-// Per-ATS role patterns. Each pattern becomes its own query (no OR-megaquery)
-// so Brave's ranking surfaces specialty roles instead of drowning them under
-// the most-common term. Budget: 8 ATS domains x 8 patterns = 64 queries; with
-// ~15 company/startup site queries on top = ~80/run, ~25 runs/month at the
-// 2000-query Brave free tier.
-const ROLE_PATTERNS = [
-  '"senior machine learning engineer"',
-  '"staff machine learning engineer"',
-  '"senior ml engineer"',
-  '"staff ml engineer"',
-  '"senior ai engineer"',
-  '"applied scientist"',
-  '"senior data scientist"',
-  '"staff data scientist"',
-];
-
-const SITE_FALLBACK_OR = [
-  '"machine learning engineer"',
-  '"ai engineer"',
-  '"data scientist"',
-  '"applied scientist"',
-];
+// Roles come from the user's seeds (ctx.queries) — no hardcoded role vocabulary.
+// Each role becomes its own per-ATS query (no OR-megaquery) so Brave's ranking
+// surfaces specialty roles instead of drowning them under the commonest term.
+// Cap the role count so a long seed list does not blow the Brave free tier
+// (~2000 queries/month): queries ~= ATS_DOMAINS x roles + company/startup sites.
+const MAX_ROLES = 8;
 
 // ── Fetch ───────────────────────────────────────────────────
 
@@ -100,6 +85,10 @@ function siteClauseFor(domain) {
 }
 
 function buildSiteQueries(queries, filters) {
+  // Roles come from the user's seeds. With none, there is nothing to search.
+  const roles = roleStrings({ queries }, { max: MAX_ROLES, quoted: true });
+  if (!roles.length) return [];
+
   // The "remote" keyword biases Brave's ranking toward remote roles, but we no
   // longer fabricate a location string from it -- a search hint is not evidence
   // the posting is remote. Location is left empty so the canonical schema marks
@@ -108,19 +97,17 @@ function buildSiteQueries(queries, filters) {
   const location = '';
   const out = [];
 
-  // ATS domains: one query per (domain, role pattern) so single-role queries
-  // surface specialty roles that an OR-megaquery would drown under "machine
-  // learning engineer" hits.
+  // ATS domains: one query per (domain, role) so single-role queries surface
+  // specialty roles that an OR-megaquery would drown under the commonest term.
   for (const domain of ATS_DOMAINS) {
     const site = siteClauseFor(domain);
-    for (const role of ROLE_PATTERNS) {
+    for (const role of roles) {
       out.push({ query: `${site} ${role}${remoteHint}`, domain, location });
     }
   }
 
-  // Company + startup sites: keep the OR-megaquery shape; they are smaller
-  // surfaces and broad enumeration is fine.
-  const orClause = SITE_FALLBACK_OR.join(' OR ');
+  // Company + startup sites: OR the user's roles; broad enumeration is fine.
+  const orClause = roles.join(' OR ');
   for (const domain of [...COMPANY_SITES, ...STARTUP_SITES]) {
     const site = siteClauseFor(domain);
     out.push({ query: `${site} (${orClause})${remoteHint}`, domain, location });

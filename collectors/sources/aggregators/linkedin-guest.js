@@ -22,18 +22,13 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'linkedin-guest';
 
 const PAGES_PER_QUERY = 2;   // 2 x 25 cards per query, politeness cap
 const DELAY_MS = 2200;
-
-const ROLE_QUERIES = [
-  'senior machine learning engineer',
-  'staff machine learning engineer',
-  'senior ai engineer',
-  'senior data scientist',
-];
+const MAX_ROLES = 4;         // politeness cap; roles come from the user's seeds
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -80,10 +75,12 @@ async function discover(ctx) {
   const { filters, logger } = ctx;
   const maxAgeDays = filters.maxAgeDays || 30;
   const tprSeconds = maxAgeDays * 86400;
+  const roles = roleStrings(ctx, { max: MAX_ROLES });
+  if (!roles.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
   const all = [];
 
   outer:
-  for (const q of ROLE_QUERIES) {
+  for (const q of roles) {
     for (let page = 0; page < PAGES_PER_QUERY; page++) {
       try {
         const html = await fetchPage(q, tprSeconds, filters.remoteOnly !== false, page * 25);

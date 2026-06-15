@@ -39,8 +39,9 @@ These files contain skill logic and can be safely replaced.
   - `ats-directories/` - Ashby customer-board enumeration
   - `ats-direct/` - Greenhouse, Lever, Workday, SmartRecruiters, iCIMS by slug
 - `scripts/*.js` - Render scripts (render-docx + render-cover-letter both call normalize(), render-pdf, render-pptx); `tailor-brief.js` emits the per-JD JD-grounded tailoring brief (`lib/tailor.js`)
-- `configs/portals.json` - Seed slugs for the emergent company index
-- `data/queries/seeds.json` - Seed discovery queries (query x location x archetype)
+- `configs/portals.json` - Starting tech-side slugs for the emergent company index (slug-harvest grows it over time; not field-specific by design)
+- `data/queries/seeds.json` - Discovery queries (query x location x archetype). Ships as industry-neutral examples; `/jobe onboard` regenerates it from the user's target roles x locations so discovery searches their field, not ML-by-default.
+- `data/companies/non-tech-seed.json` - Workday tenants + SmartRecruiters companies + iCIMS hosts, tagged by industry. This is how Workday/SmartRecruiters/iCIMS reach non-tech industries (finance, pharma, retail, media, healthcare, energy, auto, ...). Ships with ~24 example employers; users add their own target employers.
 - `data/companies/negative-list.json` - Slugs to exclude from discovery
 
 ## Reports Directory Structure

@@ -9,6 +9,7 @@
  */
 
 const { createPosting, textClean } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'apple-jobs';
 const BASE = 'https://jobs.apple.com/en-us/search';
@@ -49,12 +50,9 @@ function parseCards(html) {
   return jobs;
 }
 
-function isMlRole(title) {
-  return /\b(machine learning|ai engineer|applied ml|ml engineer|data scien|research scientist|research engineer|deep learning|computer vision|nlp|llm|genai)\b/i.test(title);
-}
-
 async function discover(ctx) {
   const { queries, logger } = ctx;
+  const titleOk = makeTitleMatcher(ctx);
   const all = [];
 
   const baseQueries = [...new Set(queries.map(q => q.query))];
@@ -69,7 +67,7 @@ async function discover(ctx) {
         const cards = parseCards(html);
         if (!cards.length) break;
         for (const c of cards) {
-          if (!isMlRole(c.title)) continue;
+          if (!titleOk(c.title)) continue;
           const p = createPosting({
             title: c.title,
             company: 'Apple',
@@ -83,7 +81,7 @@ async function discover(ctx) {
         if (cards.length < 20) break;
         page++;
       }
-      logger.info(`[${ID}] "${q}" -> ${totalForQuery} ML roles across ${page} pages`);
+      logger.info(`[${ID}] "${q}" -> ${totalForQuery} roles across ${page} pages`);
     } catch (err) {
       logger.warn(`[${ID}] "${q}" failed: ${err.message}`);
     }

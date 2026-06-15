@@ -18,6 +18,7 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'weworkremotely';
 
@@ -27,7 +28,8 @@ const FEEDS = [
   'https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss',
 ];
 
-const ROLE_MATCH = /\b(machine[\s-]*learning|ml engineer|mlops|deep learning|llm|data scien|applied scientist|artificial intelligence|ai engineer|ai\/ml|ml\/ai|data engineer)\b/i;
+// Titles are filtered locally against the user's target roles (the feeds carry
+// plenty of unrelated roles).
 
 function decodeEntities(s) {
   return (s || '')
@@ -54,6 +56,7 @@ function withinAge(rfc822, maxAgeDays) {
 async function discover(ctx) {
   const { filters, logger } = ctx;
   const maxAgeDays = filters.maxAgeDays || 30;
+  const titleOk = makeTitleMatcher(ctx);
   const all = [];
 
   for (const feedUrl of FEEDS) {
@@ -74,7 +77,7 @@ async function discover(ctx) {
         const sep = rawTitle.indexOf(':');
         const company = sep > 0 ? rawTitle.slice(0, sep).trim() : '';
         const title = sep > 0 ? rawTitle.slice(sep + 1).trim() : rawTitle;
-        if (!ROLE_MATCH.test(title)) continue;
+        if (!titleOk(title)) continue;
         if (!withinAge(pubDate, maxAgeDays)) continue;
         const p = createPosting({
           title,
@@ -88,7 +91,7 @@ async function discover(ctx) {
         }, ID);
         if (p) { all.push(p); kept++; }
       }
-      logger.info(`[${ID}] ${feedUrl.split('/').pop()} -> ${items.length} items, ${kept} ML/AI/DS within ${maxAgeDays}d`);
+      logger.info(`[${ID}] ${feedUrl.split('/').pop()} -> ${items.length} items, ${kept} matching within ${maxAgeDays}d`);
       await new Promise(r => setTimeout(r, 1000));
     } catch (err) {
       logger.warn(`[${ID}] feed failed (${feedUrl}): ${err.message}`);

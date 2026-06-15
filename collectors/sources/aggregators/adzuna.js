@@ -16,15 +16,11 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'adzuna';
 
-const ROLE_QUERIES = [
-  'senior machine learning engineer',
-  'staff machine learning engineer',
-  'senior ai engineer',
-  'senior data scientist',
-];
+const MAX_ROLES = 4; // roles come from the user's seeds
 
 function comp(r) {
   const lo = r.salary_min ? Math.round(r.salary_min) : null;
@@ -62,9 +58,11 @@ async function discover(ctx) {
   if (!appId || !appKey) { logger.warn(`[${ID}] skipped: no ADZUNA_APP_ID / ADZUNA_APP_KEY`); return []; }
 
   const maxAgeDays = filters.maxAgeDays || 30;
+  const roles = roleStrings(ctx, { max: MAX_ROLES });
+  if (!roles.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
   const all = [];
 
-  for (const q of ROLE_QUERIES) {
+  for (const q of roles) {
     try {
       const results = await fetchPage(q, 1, maxAgeDays, appId, appKey, filters.remoteOnly !== false);
       for (const r of results) {

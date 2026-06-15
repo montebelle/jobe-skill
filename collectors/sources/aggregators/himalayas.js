@@ -15,10 +15,12 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'himalayas';
 
-const ROLE_MATCH = /\b(machine[\s-]*learning|ml engineer|\bai\b|artificial intelligence|data scien|deep learning|llm|mlops|applied scientist)\b/i;
+// No keyword search: pull the recent feed and filter titles locally against
+// the user's target roles.
 const PAGES = 3;        // 3 x 100 most recent postings per run
 const PAGE_SIZE = 100;
 
@@ -55,6 +57,7 @@ function withinAge(iso, maxAgeDays) {
 async function discover(ctx) {
   const { filters, logger } = ctx;
   const maxAgeDays = filters.maxAgeDays || 30;
+  const titleOk = makeTitleMatcher(ctx);
   const all = [];
 
   for (let page = 0; page < PAGES; page++) {
@@ -70,7 +73,7 @@ async function discover(ctx) {
       let kept = 0;
       for (const j of jobs) {
         const title = j.title || '';
-        if (!ROLE_MATCH.test(title)) continue;
+        if (!titleOk(title)) continue;
         const posted = jobDate(j);
         if (!withinAge(posted, maxAgeDays)) continue;
         const restr = Array.isArray(j.locationRestrictions) && j.locationRestrictions.length
@@ -89,7 +92,7 @@ async function discover(ctx) {
         }, ID);
         if (p) { all.push(p); kept++; }
       }
-      logger.info(`[${ID}] page ${page} -> ${jobs.length} jobs, ${kept} ML/AI/DS within ${maxAgeDays}d`);
+      logger.info(`[${ID}] page ${page} -> ${jobs.length} jobs, ${kept} matching within ${maxAgeDays}d`);
       await new Promise(r => setTimeout(r, 1200));
     } catch (err) {
       logger.warn(`[${ID}] page ${page} failed: ${err.message}`);

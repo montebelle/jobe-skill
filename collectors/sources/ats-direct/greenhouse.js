@@ -12,9 +12,9 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting, stripHtml } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'greenhouse-direct';
-const ML_REGEX = /\b(machine learning|ml engineer|data scien|ai engineer|llm|genai|gen ai|deep learning|nlp|computer vision|causal|forecast|recommendation|applied scientist|research engineer|mlops|member of technical staff)\b/i;
 
 function loadSlugs(ctx) {
   const s = new Set();
@@ -72,6 +72,7 @@ function slugFallbackName(slug) {
 
 async function discover(ctx) {
   const { logger } = ctx;
+  const titleOk = makeTitleMatcher(ctx);
   const slugs = loadSlugs(ctx);
   logger.info(`[${ID}] scanning ${slugs.length} Greenhouse boards`);
 
@@ -80,10 +81,10 @@ async function discover(ctx) {
     try {
       const data = await fetchBoard(slug);
       if (!data || !data.jobs) continue;
-      const mlJobs = data.jobs.filter(j => ML_REGEX.test(j.title));
-      if (!mlJobs.length) continue;
+      const matched = data.jobs.filter(j => titleOk(j.title));
+      if (!matched.length) continue;
       const company = (await fetchBoardName(slug)) || slugFallbackName(slug);
-      for (const j of mlJobs) {
+      for (const j of matched) {
         const p = createPosting({
           title: j.title,
           company,
