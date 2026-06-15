@@ -13,7 +13,7 @@ flowchart TB
 
     subgraph Sources[collectors/sources/ — plugin registry]
       direction LR
-      Agg[aggregators/<br/>SerpAPI Jobs<br/>SerpAPI site:<br/>HN Who-hiring]
+      Agg[aggregators/<br/>Brave<br/>SerpAPI Jobs + site:<br/>HN Who-hiring<br/>Remotive/RemoteOK/WWR/Himalayas<br/>LinkedIn guest<br/>Adzuna + JSearch]
       Comp[company-specific/<br/>Amazon<br/>Apple SSR]
       AtsDir[ats-directories/<br/>Ashby dirs]
       AtsDirect[ats-direct/<br/>Greenhouse<br/>Lever]
@@ -106,7 +106,7 @@ Standard Bertrand & Mullainathan (2004) methodology: hold the resume content con
 /jobe find
   └─ load modes/{_shared, _profile, find}.md
   └─ collectors/pipeline.js
-      ├─ spawn 8 sources in parallel (rate-limited)
+      ├─ spawn 19 sources in parallel (rate-limited)
       ├─ normalize to Posting[]
       ├─ dedup.js (URL → dedupKey → MinHash LSH)
       ├─ filter (recency ≤30d + location + role + negative-list)

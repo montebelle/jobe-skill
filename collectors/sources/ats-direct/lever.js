@@ -43,6 +43,16 @@ async function fetchBoard(slug) {
   return res.json();
 }
 
+// Fold Lever's workplaceType ("remote"|"hybrid"|"on-site") into the location
+// string so the canonical classifier sees the explicit signal.
+function leverLocation(j) {
+  const base = j.categories?.location || '';
+  const wt = j.workplaceType || '';
+  if (/hybrid/i.test(wt)) return base ? `${base} (Hybrid)` : 'Hybrid';
+  if (/remote/i.test(wt)) return /remote/i.test(base) ? base : (base ? `${base} (Remote)` : 'Remote');
+  return base;
+}
+
 async function discover(ctx) {
   const { logger } = ctx;
   const slugs = loadSlugs(ctx);
@@ -59,7 +69,7 @@ async function discover(ctx) {
           title: j.text,
           company: slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
           companySlug: slug,
-          location: j.categories?.location,
+          location: leverLocation(j),
           url: j.hostedUrl || j.applyUrl,
           department: j.categories?.team,
           postedDate: j.createdAt,

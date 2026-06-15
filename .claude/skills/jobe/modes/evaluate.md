@@ -79,9 +79,17 @@ Report: estimated base, total comp, equity, level calibration, negotiation lever
 
 ## Block E: Resume + Cover Letter Generation
 
-**Step 0 (REQUIRED — Build experience + selectedProjects via bullet-select):**
+**Step 0 (REQUIRED — JD-grounded tailoring brief, THEN reframe):**
 
-Use `lib/bullet-select.js` `buildExperience()` and `pickProjects()` to select per-JD bullets and projects from `data/bullet-library.json`. Do NOT hand-author bullets and do NOT reorder a fixed pool — that produces resumes interchangeable in body content.
+Tailoring is NOT emitting pre-written bullets. It is: read what the role asks for, map your real evidence to it, LEAD with the highest-relevance evidence, and reframe it in the JD's own language. `bullet-select` + the bullet library are an evidence POOL, not the final resume. Keyword overlap alone produces resumes that do not speak to the role (a ranking JD led by a data-platform bullet because both contain "platform"). Do NOT skip the reframe.
+
+**(a) Get the JD brief (deterministic half — `lib/tailor.js`):**
+```bash
+node scripts/tailor-brief.js --url "<canonicalUrl>"      # or: node scripts/tailor-brief.js <jd.txt>
+```
+Prints the JD archetype, ranked keywords, responsibilities + qualifications to mirror, your evidence ranked by JD fit (per role, with matched terms), honest gaps, and a generator checklist. (Programmatic: `require('./lib/tailor').tailorBrief(jdText, baseline)`.)
+
+**(b) Build the candidate pool (`lib/bullet-select.js`):** Use `buildExperience()` and `pickProjects()` to select per-JD bullets and projects from `data/bullet-library.json`. Do NOT hand-author bullets and do NOT reorder a fixed pool. The output is a CANDIDATE pool, not the final resume.
 
 ```js
 const { buildExperience, pickProjects } = require('./lib/bullet-select');
@@ -98,6 +106,15 @@ resume.selectedProjects = pickProjects(spec, 2);
 ```
 
 If the bullet library lacks evidence for a JD-specific archetype need, ADD a new entry to `data/bullet-library.json` (with `id`, `archetypes[]`, `keywords[]`, `text`) before generating the resume. Never invent evidence at resume-generation time.
+
+**(c) REFRAME to the JD (REQUIRED LLM step):** Rewrite the resume so it speaks to THIS role:
+1. **Reorder** entries and bullets so each leads with the highest-relevance evidence for the JD's archetype — not the default order, and not whatever shares the most tokens.
+2. **Reframe every bullet** into the JD's vocabulary (brief keywords + responsibilities) WITHOUT inventing. Reword real evidence only; PRESERVE the specific metrics and algorithms — change the lead, framing, and terminology to match what the role asks for.
+3. **Write a role-specific summary** that mirrors the JD responsibilities and leads with the strongest matching evidence.
+4. **Pick relevant projects** (retrieval / ranking / inference / agentic per the JD), not the default two.
+5. **Name the honest gaps** (from the brief): position the adjacency; never claim experience the evidence does not support.
+
+**Before rendering, verify JD-vocabulary coverage:** the role's top keywords (from the brief) should appear across the summary + bullets. If they do not, the resume is not tailored — reframe again.
 
 **Then apply the rest of the Block E rules:**
 

@@ -207,6 +207,8 @@ resume.selectedProjects = pickProjects(spec, 2);
 
 `buildExperience` walks each baseline experience entry, resolves `company` to a library role-key (via `library.companyKeyMap` declared in your `bullet-library.json`, optionally overridden by `spec.companyKeyMap`, with `companySlug(company)` fallback), filters that role's bullet pool by archetype, scores remaining by JD-keyword overlap, and returns the top N. `pickProjects` does the same against the library's `selectedProjects` array.
 
+The output of `buildExperience` / `pickProjects` is a CANDIDATE pool, not the final resume. `evaluate.md` Block E then runs the required JD-grounded reframe: get the per-JD brief (`scripts/tailor-brief.js` / `lib/tailor.js`), reorder and reframe each bullet into the JD's vocabulary (preserving real metrics, never inventing), write a role-specific summary, and verify keyword coverage before rendering. Keyword overlap alone is not tailoring.
+
 ### Bullet library structure
 
 Your `data/bullet-library.json` must have shape:

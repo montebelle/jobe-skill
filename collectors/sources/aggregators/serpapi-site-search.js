@@ -95,13 +95,15 @@ function buildSiteQueries(queries, filters) {
   const locations = [...new Set(queries.map(q => q.location).filter(Boolean))];
   const remoteHint = filters.remoteOnly ? ' remote' : '';
 
+  // Do not fabricate a 'Remote' location from the search hint; leave it empty
+  // (or the non-remote seed location) and let enrichment verify from the JD.
   for (const domain of ATS_DOMAINS) {
     const site = siteClauseFor(domain);
     for (const role of SERP_ROLE_PATTERNS) {
       out.push({
         query: `${site} ${role}${remoteHint}${afterClause}`,
         domain,
-        location: filters.remoteOnly ? 'Remote' : (locations[0] || ''),
+        location: filters.remoteOnly ? '' : (locations[0] || ''),
       });
     }
   }
@@ -111,7 +113,7 @@ function buildSiteQueries(queries, filters) {
     out.push({
       query: `${site} (${SERP_FALLBACK_OR})${remoteHint}${afterClause}`,
       domain,
-      location: filters.remoteOnly ? 'Remote' : (locations[0] || ''),
+      location: filters.remoteOnly ? '' : (locations[0] || ''),
     });
   }
   return out;

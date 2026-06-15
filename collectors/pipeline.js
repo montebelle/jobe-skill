@@ -17,7 +17,7 @@
  *   node collectors/pipeline.js --dry-run      # show sources and queries only
  *   node collectors/pipeline.js --source X     # run one source
  *   node collectors/pipeline.js --no-enrich    # skip JD fetch, show discovery only
- *   node collectors/pipeline.js --max-enrich N # cap enrichment to N postings (default 60)
+ *   node collectors/pipeline.js --max-enrich N # cap enrichment to N postings (default 300)
  */
 
 const fs = require('fs');
@@ -131,6 +131,30 @@ function updateCompanyIndex(postings) {
   return Object.keys(existing).length;
 }
 
+// ── Requisition history (cross-run repost tracking for ghost-score) ──
+// Records, per dedupKey, the set of run-dates a req has appeared in, and
+// annotates each posting with `reqRuns` (how many distinct runs it has been
+// seen in, including today). ghost-score's repostSignal consumes this.
+function updateReqHistory(postings) {
+  const p = path.join(ROOT, 'signals', 'req-history.json');
+  let hist = {};
+  if (fs.existsSync(p)) {
+    try { hist = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { hist = {}; }
+  }
+  for (const post of postings) {
+    const key = post.dedupKey;
+    if (!key) continue;
+    const entry = hist[key] || { company: post.company, title: post.title, runs: [] };
+    if (!entry.runs.includes(TODAY)) entry.runs.push(TODAY);
+    entry.runs = entry.runs.slice(-12); // cap history depth
+    entry.lastSeen = TODAY;
+    hist[key] = entry;
+    post.reqRuns = entry.runs.length;
+  }
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  atomicWrite(p, JSON.stringify(hist, null, 2));
+}
+
 // ── Filters ─────────────────────────────────────────────────
 
 function loadQueueUrls() {
@@ -173,15 +197,14 @@ function applyFilters(postings, filters) {
     if (urls.some(u => queueUrls.has(u))) { rejected.queue++; continue; }
     // Location: US-only
     if (filters.usOnly && p.us === false) { rejected.location++; continue; }
-    // Location: remote-only — hard filter per _profile.md. STRICT.
-    // Only postings with explicit remote === 'remote' pass.
-    // 'hybrid', 'onsite', AND 'unknown' (which covers ambiguous "United
-    // States" / "Multiple Locations" / "City, State" patterns that are
-    // almost always onsite in practice) are all rejected.
-    // For the rare unknown-but-actually-remote case, the user can override
-    // with --allow-onsite (which disables this filter entirely) or evaluate
-    // the specific URL via /jobe [url].
-    if (filters.remoteOnly && p.remote !== 'remote') { rejected.nonRemote++; continue; }
+    // Location: remote-only — hard filter per _profile.md.
+    // PRE-ENRICH stage is permissive: reject only postings we already KNOW are
+    // non-remote ('hybrid'/'onsite'). 'unknown' (ambiguous "United States" /
+    // "Multiple Locations" strings, and aggregator hits with no location) is
+    // kept so enrichment can fetch the real JD and verify. The STRICT pass —
+    // dropping anything that is not 'remote' after enrichment — runs in
+    // finalizeRemoteAndRecency() once we have JD-derived signals.
+    if (filters.remoteOnly && (p.remote === 'hybrid' || p.remote === 'onsite')) { rejected.nonRemote++; continue; }
     // Recency: apply seniority-aware cutoff (keep if date unknown)
     if (p.postedDate && baseDays > 0) {
       const useDays = seniorRe.test(p.title) ? seniorDays : baseDays;
@@ -191,6 +214,43 @@ function applyFilters(postings, filters) {
     out.push(p);
   }
   return { kept: out, rejected };
+}
+
+// Strict post-enrichment gate. Runs AFTER enrich() has fetched JD text and
+// re-derived posting.remote / .us / .postedDate, so remote and recency are
+// decided on verified data rather than the thin listing-stage location string.
+function finalizeRemoteAndRecency(postings, filters) {
+  const seniorRe = /\b(senior|staff|principal|lead|member of technical staff)\b/i;
+  const baseDays = filters.maxAgeDays || 30;
+  const seniorDays = baseDays + (filters.seniorityExtensionDays ?? 15);
+  const out = [];
+  const rejected = { nonRemote: 0, recency: 0, location: 0 };
+  for (const p of postings) {
+    if (filters.usOnly && p.us === false) { rejected.location++; continue; }
+    if (filters.remoteOnly && p.remote !== 'remote') { rejected.nonRemote++; continue; }
+    if (p.postedDate && baseDays > 0) {
+      const useDays = seniorRe.test(p.title) ? seniorDays : baseDays;
+      const cutoff = new Date(Date.now() - useDays * 86400_000);
+      if (new Date(p.postedDate) < cutoff) { rejected.recency++; continue; }
+    }
+    out.push(p);
+  }
+  return { kept: out, rejected };
+}
+
+// Bounded-concurrency async map. enrich() can now run over a few hundred
+// postings; an unbounded Promise.all would open that many sockets at once.
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      out[idx] = await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 // ── Persist ─────────────────────────────────────────────────
@@ -281,6 +341,9 @@ async function run(opts = {}) {
   const deduped = dedup(raw);
   log.info(`after dedup: ${deduped.length}`);
 
+  // ── Annotate cross-run reposts (feeds ghost-score repostSignal) ──
+  try { updateReqHistory(deduped); } catch (err) { log.warn(`req-history failed (non-fatal): ${err.message}`); }
+
   // ── Update company index ──
   const totalKnown = updateCompanyIndex(deduped);
   log.info(`company index now has ${totalKnown} companies`);
@@ -315,17 +378,21 @@ async function run(opts = {}) {
 
   // ── Enrich top-K ──
   if (opts.noEnrich) {
-    persist(shownKept, 'ranked');
-    log.info(`skip enrich; ranked ${shownKept.length}`);
-    return shownKept;
+    // No JD to verify against, so apply the strict gate on listing-stage data:
+    // only explicit 'remote' survives (matches the old pre-enrich behavior).
+    const fast = finalizeRemoteAndRecency(shownKept, filters);
+    persist(fast.kept, 'ranked');
+    log.info(`skip enrich; ranked ${fast.kept.length} (strict remote/recency on listing data)`);
+    return fast.kept;
   }
-  // Enrich broadly; the title gate already kept the right candidates.
-  // 300 covers ~all postings that pass filters today (~219). HTTP fetches
-  // are cheap and 30-day cached, so the cost of enriching widely is low.
+  // Enrich broadly; the title gate already kept the right candidates and the
+  // remote gate is deliberately permissive pre-enrich (keeps 'unknown'), so
+  // enrichment is what verifies remote/recency. 30-day cached + bounded
+  // concurrency keeps the cost of enriching widely low.
   const maxEnrich = opts.maxEnrich || 300;
   const topK = shownKept.slice(0, maxEnrich);
-  log.info(`enriching top ${topK.length}`);
-  await Promise.all(topK.map(p => enrich(p).catch(err => { log.warn(`enrich ${p.canonicalUrl} failed: ${err.message}`); return p; })));
+  log.info(`enriching top ${topK.length} (concurrency 8)`);
+  await mapLimit(topK, 8, p => enrich(p).catch(err => { log.warn(`enrich ${p.canonicalUrl} failed: ${err.message}`); return p; }));
 
   // ── Full rank. Every enriched posting that has any JD text — whether
   // from full enrichment or a fallback search-result snippet pre-attached
@@ -333,11 +400,24 @@ async function run(opts = {}) {
   for (const p of topK) {
     if (p.jdText) fullScore(p);
   }
-  const refused = fuseRanking(topK);
-  topK.splice(0, topK.length, ...refused);
+
+  // ── STRICT post-enrich gate: now that remote/us/postedDate reflect the real
+  // JD, drop non-remote, non-US, and stale postings that slipped through the
+  // permissive pre-enrich filter. ──
+  const finalGate = finalizeRemoteAndRecency(topK, filters);
+  log.info(`post-enrich gate: kept ${finalGate.kept.length} (dropped non-remote=${finalGate.rejected.nonRemote} stale=${finalGate.rejected.recency} non-us=${finalGate.rejected.location})`);
+  const finalList = finalGate.kept;
+
+  // Compute RRF fields (used as a tiebreak + diagnostic) then order by the
+  // JD-aware matchScore so the displayed score and the list order agree.
+  // Postings with no JD (matchScore null) sink to the bottom.
+  fuseRanking(finalList);
+  finalList.sort((a, b) =>
+    ((b.matchScore ?? -1) - (a.matchScore ?? -1)) || ((b.rrfScore || 0) - (a.rrfScore || 0))
+  );
 
   persist(shownKept, 'ranked-all');
-  persist(topK, 'ranked-enriched');
+  persist(finalList, 'ranked-enriched');
 
   // ── Discovery summary (consumed by modes/find.md to decide whether to
   // launch the WebSearch-agent fallback) ──
@@ -352,6 +432,8 @@ async function run(opts = {}) {
     afterDedup: deduped.length,
     afterFilter: kept.length,
     enriched: topK.length,
+    finalCount: finalList.length,
+    postEnrichRejected: finalGate.rejected,
     rejected,
     needsAgentFallback: (perSource['brave-search'] || 0) < 100 || deduped.length < 300,
     fallbackReason: ((perSource['brave-search'] || 0) < 100)
@@ -362,7 +444,7 @@ async function run(opts = {}) {
 
   log.info(`done. wrote ${OUT_DIR}`);
   if (summary.needsAgentFallback) log.info(`recall low (${summary.fallbackReason}); mode should launch jobe-job-discovery agent`);
-  return topK;
+  return finalList;
 }
 
 function loadCompanyIndexObj() {
