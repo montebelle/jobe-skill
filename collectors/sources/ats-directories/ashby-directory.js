@@ -54,6 +54,19 @@ function isMlRole(title) {
   return /\b(machine learning|ml engineer|ai engineer|applied scien|research engineer|research scien|data scien|mlops|llm|genai|deep learning|computer vision|nlp|member of technical staff)\b/i.test(title || '');
 }
 
+// Fold Ashby's structured workplace signal into the location string so the
+// canonical classifier (which keys off location/title text) classifies remote
+// correctly instead of inferring from a bare city.
+function ashbyLocation(j) {
+  const base = j.location || '';
+  const wt = j.workplaceType || '';
+  if (/hybrid/i.test(wt)) return base ? `${base} (Hybrid)` : 'Hybrid';
+  if (j.isRemote === true || /remote/i.test(wt)) {
+    return /remote/i.test(base) ? base : (base ? `${base} (Remote)` : 'Remote');
+  }
+  return base;
+}
+
 async function discover(ctx) {
   const { logger } = ctx;
   const slugs = new Set([...loadKnownSlugs()]);
@@ -77,9 +90,14 @@ async function discover(ctx) {
         const url = j.jobUrl || `https://jobs.ashbyhq.com/${slug}/${j.id}`;
         const p = createPosting({
           title: j.title,
+          // Ashby's posting API exposes no org display name; title-case the
+          // slug (Ashby slugs are usually a single word, so this reads cleanly).
           company: slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
           companySlug: slug,
-          location: j.location,
+          // workplaceType ("Remote"|"Hybrid"|"On-site") and isRemote are
+          // authoritative here; fold them into the location string so the
+          // canonical classifier sees them instead of guessing.
+          location: ashbyLocation(j),
           url,
           department: j.department,
           postedDate: j.publishedDate || j.updatedAt,

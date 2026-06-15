@@ -132,11 +132,11 @@ Before any role-keyword query runs, `lib/slug-harvest.js` issues 21 role-less Br
 
 ### Phase 1: Discovery
 
-`collectors/pipeline.js` fans out 12 source plugins in parallel, rate-limited per source:
+`collectors/pipeline.js` fans out 19 source plugins in parallel, rate-limited per source:
 
 | Category | Sources |
 |---|---|
-| Aggregators (keyword-driven, cross-platform) | Brave Search, SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring |
+| Aggregators (keyword-driven, cross-platform) | Brave Search, SerpAPI Google Jobs, SerpAPI site: search, HN Who-is-hiring, Remotive, RemoteOK, WeWorkRemotely, Himalayas, LinkedIn (guest), Adzuna, JSearch |
 | Company-specific | Amazon, Apple |
 | ATS directories | Ashby customer boards |
 | ATS direct (per-slug API) | Greenhouse, Lever, Workday, SmartRecruiters, iCIMS |

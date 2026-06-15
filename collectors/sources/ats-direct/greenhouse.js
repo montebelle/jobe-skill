@@ -52,6 +52,24 @@ async function fetchBoard(slug) {
   return res.json();
 }
 
+// The /jobs endpoint omits the board's display name. The board root endpoint
+// returns the real, human company name (e.g. slug "grafanalabs" -> "Grafana
+// Labs", "hs" -> "HubSpot"). Fetched lazily, only for boards that have a
+// matching role, so we don't pay a request for empty boards.
+async function fetchBoardName(slug) {
+  try {
+    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${slug}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return (d && typeof d.name === 'string' && d.name.trim()) ? d.name.trim() : null;
+  } catch { return null; }
+}
+
+// Fallback only: title-case the slug when the board name is unavailable.
+function slugFallbackName(slug) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 async function discover(ctx) {
   const { logger } = ctx;
   const slugs = loadSlugs(ctx);
@@ -62,11 +80,13 @@ async function discover(ctx) {
     try {
       const data = await fetchBoard(slug);
       if (!data || !data.jobs) continue;
-      for (const j of data.jobs) {
-        if (!ML_REGEX.test(j.title)) continue;
+      const mlJobs = data.jobs.filter(j => ML_REGEX.test(j.title));
+      if (!mlJobs.length) continue;
+      const company = (await fetchBoardName(slug)) || slugFallbackName(slug);
+      for (const j of mlJobs) {
         const p = createPosting({
           title: j.title,
-          company: slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          company,
           companySlug: slug,
           location: j.location?.name,
           url: j.absolute_url,

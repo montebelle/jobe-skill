@@ -33,12 +33,12 @@ These files contain skill logic and can be safely replaced.
   - Quality + audit: ghost-score, calibration, bias-audit, tailoring
   - Tracker: tracker, tracker-stats, tracker-writer, patterns
 - `collectors/pipeline.js` - Unified orchestrator across all plugin sources
-- `collectors/sources/**/*.js` - 8 source plugins:
-  - `aggregators/` - SerpAPI Google Jobs, SerpAPI site:, HN Who-is-hiring
+- `collectors/sources/**/*.js` - 19 source plugins:
+  - `aggregators/` - Brave Search, SerpAPI Google Jobs, SerpAPI site:, HN Who-is-hiring, Remotive, RemoteOK, WeWorkRemotely, Himalayas, LinkedIn guest, Adzuna, JSearch
   - `company-specific/` - Amazon public JSON, Apple SSR
   - `ats-directories/` - Ashby customer-board enumeration
-  - `ats-direct/` - Greenhouse, Lever by slug
-- `scripts/*.js` - Render scripts (render-docx + render-cover-letter both call normalize(), render-pdf, render-pptx)
+  - `ats-direct/` - Greenhouse, Lever, Workday, SmartRecruiters, iCIMS by slug
+- `scripts/*.js` - Render scripts (render-docx + render-cover-letter both call normalize(), render-pdf, render-pptx); `tailor-brief.js` emits the per-JD JD-grounded tailoring brief (`lib/tailor.js`)
 - `configs/portals.json` - Seed slugs for the emergent company index
 - `data/queries/seeds.json` - Seed discovery queries (query x location x archetype)
 - `data/companies/negative-list.json` - Slugs to exclude from discovery

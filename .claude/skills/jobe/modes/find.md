@@ -50,7 +50,7 @@ Options:
 - `--dry-run` - print sources and queries only, no network calls
 - `--no-enrich` - skip JD fetching (discovery only, fast)
 - `--source X` - run a single source (e.g. `--source amazon-jobs`)
-- `--max-enrich N` - cap enrichment to N top-scored postings (default 60)
+- `--max-enrich N` - cap enrichment to N top-scored postings (default 300)
 - `--max-age N` - override recency window (default 30 days)
 - `--no-us-only` - allow non-US roles
 - `--allow-onsite` - **disable the default remote-only filter** (per `_profile.md`, hybrid + onsite are excluded by default; this flag opens the gate)
@@ -176,6 +176,8 @@ If any are strong-tie or weak-tie, ask: "Run `/jobe contacto {company}` on any o
 If all are cold and `data/contacts.json` has zero entries, surface: "No referral contacts populated. Add them to `data/contacts.json` to unlock the highest-impact empirical lever in this skill."
 
 ## Step 4: Auto-Evaluate Top Matches
+
+Every generated resume runs through `evaluate.md` Block E, which REQUIRES the JD-grounded reframe (the `scripts/tailor-brief.js` brief, then reorder + reframe each bullet to the role). Resumes must speak to each JD, never reuse a generic bullet set.
 
 After referral check:
 

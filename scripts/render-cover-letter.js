@@ -27,7 +27,14 @@ function generate(inputPath) {
   }
 
   const data = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-  const outputPath = inputPath.replace(/resume-/, 'cover-letter-').replace(/\.json$/, '.docx');
+  // Derive the cover-letter filename from the basename, guaranteeing it never
+  // collides with the resume docx (render-docx.js writes "<base>.docx"). If the
+  // input follows the "resume-*.json" convention we swap the token; otherwise
+  // we prefix "cover-letter-" so the two outputs are always distinct files.
+  const dir = path.dirname(inputPath);
+  const base = path.basename(inputPath).replace(/\.json$/, '');
+  const clBase = base.includes('resume-') ? base.replace('resume-', 'cover-letter-') : `cover-letter-${base}`;
+  const outputPath = path.join(dir, `${clBase}.docx`);
 
   if (!data.coverLetter) {
     console.error('JSON must contain a "coverLetter" field.');
@@ -35,7 +42,7 @@ function generate(inputPath) {
   }
 
   const contact = data.contact || {};
-  const contactLine = [contact.phone, contact.email, contact.location, contact.linkedin].filter(Boolean).join('  |  ');
+  const contactLine = [contact.phone, contact.email, contact.location, contact.linkedin, contact.github].filter(Boolean).join('  |  ');
   const paragraphs = normalize(data.coverLetter).split('\n\n').filter(Boolean);
   const dateStr = new Date(data.date || Date.now()).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric'
@@ -48,7 +55,7 @@ function generate(inputPath) {
       spacing: { after: 40 },
       children: [
         new TextRun({
-          text: (data.name || 'Your Name').toUpperCase(),
+          text: (data.name || 'John T. Bell').toUpperCase(),
           font: FONT, size: 44, bold: true, color: NAVY, characterSpacing: 60
         })
       ]
@@ -95,7 +102,7 @@ function generate(inputPath) {
     new Paragraph({
       children: [
         new TextRun({
-          text: data.name || 'Your Name',
+          text: data.name || 'John T. Bell',
           font: FONT, size: 22, bold: true, color: BLACK
         })
       ]
@@ -104,7 +111,7 @@ function generate(inputPath) {
 
   const doc = new Document({
     creator: 'Jobe Positioning Intelligence',
-    title: `Cover Letter - ${data.name || 'Your Name'} - ${data.company || ''} ${data.role || ''}`,
+    title: `Cover Letter - ${data.name || 'John T. Bell'} - ${data.company || ''} ${data.role || ''}`,
     styles: {
       default: {
         document: {

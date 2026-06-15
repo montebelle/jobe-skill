@@ -2,11 +2,12 @@
 name: jobe
 description: >
   Career intelligence skill: onboard (guided setup interview), evaluate (tailored
-  resume + cover letter), find (12-source discovery pipeline), batch (multi-job),
+  resume + cover letter), find (19-source discovery pipeline), batch (multi-job),
   tracker (pipeline), interview-prep, followup, patterns (analytics), contacto
-  (outreach), deep (company research), project (portfolio eval), calibrate, audit.
+  (outreach), deep (company research), project (portfolio eval), linkedin-tab
+  (ingest your open LinkedIn Jobs tab), calibrate, audit.
 user-invocable: true
-argument-hint: "onboard | find [role/location] | [URL] | batch [urls] | tracker | interview-prep | followup | patterns | contacto | deep | project | calibrate | audit"
+argument-hint: "onboard | find [role/location] | [URL] | batch [urls] | tracker | interview-prep | followup | patterns | contacto | deep | project | linkedin-tab | calibrate | audit"
 allowed-tools: "Bash Read Write Edit Glob Grep Agent WebSearch WebFetch"
 effort: high
 ---
@@ -46,7 +47,7 @@ Parse `$ARGUMENTS`:
 | First Word | Mode File | What It Does |
 |---|---|---|
 | `onboard`, `init`, `setup`, `start` | `modes/onboard.md` | Guided 7-step interview that produces every personal file Jobe needs. Run this once after install. |
-| `find`, `search`, `discover`, `jobs` | `modes/find.md` | Discover jobs via 12-source pipeline (Brave + SerpAPI + HN + Amazon + Apple + Ashby + Greenhouse + Lever + Workday + SmartRecruiters + iCIMS) |
+| `find`, `search`, `discover`, `jobs` | `modes/find.md` | Discover jobs via 19-source pipeline (Brave + SerpAPI + HN + remote boards [Remotive/RemoteOK/WeWorkRemotely/Himalayas] + LinkedIn guest + Adzuna + JSearch + Amazon + Apple + Ashby + Greenhouse + Lever + Workday + SmartRecruiters + iCIMS) |
 | `tracker`, `pipeline`, `status` | `modes/tracker.md` | View application pipeline with stats |
 | `batch` | `modes/batch.md` | Process multiple postings |
 | `interview-prep`, `interview`, `prep` | `modes/interview-prep.md` | Prepare for interviews with story mapping |
@@ -58,6 +59,7 @@ Parse `$ARGUMENTS`:
 | `apply` | `modes/apply.md` | Fill + submit one job application via Chrome (human-in-the-loop) |
 | `apply-all` | `modes/apply-all.md` | Process entire apply queue. Default: paste-ready blocks. `--chrome` flag for browser automation. |
 | `apply-assisted` | `modes/apply-assisted.md` | Opens each URL in your browser, prints paste-ready blocks. No CAPTCHA issues. |
+| `linkedin-tab`, `tab`, `linkedin-jobs`, `ingest` | `modes/linkedin-tab.md` | Read your OPEN LinkedIn Jobs tab (Chrome extension, read-only) and ingest postings into the pipeline |
 | `calibrate` | `modes/calibrate.md` | Human-label a sample of LLM-judge outputs; compute Cohen's kappa |
 | `audit` | `modes/audit.md` | Run bias audit: perturb name/school/intl, measure score variance |
 

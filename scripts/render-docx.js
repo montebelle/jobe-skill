@@ -119,6 +119,23 @@ function buildSkills(skills) {
   return paragraphs;
 }
 
+function buildSelectedProjects(projects) {
+  if (!Array.isArray(projects) || projects.length === 0) return [];
+  const paragraphs = [sectionHeading('Selected Projects')];
+  for (const p of projects) {
+    if (!p || !p.summary) continue;
+    const titleText = p.name ? normalize(p.name) + ' - ' : '';
+    paragraphs.push(new Paragraph({
+      spacing: { before: 60, after: 30, line: 276 },
+      children: [
+        new TextRun({ text: titleText, font: FONT, size: 21, bold: true, color: BLACK }),
+        new TextRun({ text: normalize(p.summary), font: FONT, size: 21, color: CHARCOAL }),
+      ],
+    }));
+  }
+  return paragraphs;
+}
+
 function buildEducation(education) {
   const paragraphs = [sectionHeading('Education')];
   const edu = Array.isArray(education) ? education[0] : education;
@@ -176,7 +193,7 @@ function generate(inputPath) {
   }
 
   const contact = raw.contact || {};
-  const contactLine = [contact.phone, contact.email, contact.location, contact.linkedin].filter(Boolean).join('  |  ');
+  const contactLine = [contact.phone, contact.email, contact.location, contact.linkedin, contact.github].filter(Boolean).join('  |  ');
 
   // Build the entire document programmatically for full control
   const children = [
@@ -186,7 +203,7 @@ function generate(inputPath) {
       spacing: { after: 40 },
       children: [
         new TextRun({
-          text: (raw.name || 'Your Name').toUpperCase(),
+          text: (raw.name || 'John T. Bell').toUpperCase(),
           font: FONT, size: 44, bold: true, color: NAVY, characterSpacing: 60
         })
       ]
@@ -209,6 +226,8 @@ function generate(inputPath) {
     }),
     // Experience
     ...buildExperience(raw.experience || []),
+    // Selected Projects (only renders if array present and non-empty)
+    ...buildSelectedProjects(raw.selectedProjects),
     // Skills
     ...buildSkills(raw.skills || {}),
     // Education
@@ -217,7 +236,7 @@ function generate(inputPath) {
 
   const doc = new Document({
     creator: 'Jobe Positioning Intelligence',
-    title: `Resume - ${raw.name || 'Your Name'} - ${raw.company || ''} ${raw.role || ''}`,
+    title: `Resume - ${raw.name || 'John T. Bell'} - ${raw.company || ''} ${raw.role || ''}`,
     styles: {
       default: {
         document: {
