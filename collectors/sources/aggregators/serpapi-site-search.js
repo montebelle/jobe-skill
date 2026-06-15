@@ -16,6 +16,7 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'serpapi-site-search';
 
@@ -53,8 +54,6 @@ const COMPANY_SITES = [
 const STARTUP_SITES = [
   { site: 'wellfound.com/jobs', tag: 'wellfound' },
   { site: 'workatastartup.com/jobs', tag: 'ycombinator' },
-  { site: 'aijobs.net', tag: 'aijobs' },
-  { site: 'mlbuddies.com/jobs', tag: 'mlbuddies' },
 ];
 
 // ── Fetch ───────────────────────────────────────────────────
@@ -72,16 +71,10 @@ function dateCutoff(maxAgeDays) {
   return d.toISOString().slice(0, 10);
 }
 
-// Per-(domain, role) fan-out, same shape as brave-search.js. SerpAPI free
-// tier is 100/month so we use a smaller pattern set than Brave; users on
-// paid plans can still benefit from the extra recall without hitting limits.
-const SERP_ROLE_PATTERNS = [
-  '"senior machine learning engineer"',
-  '"staff machine learning engineer"',
-  '"senior data scientist"',
-  '"senior ai engineer"',
-];
-const SERP_FALLBACK_OR = '"machine learning engineer" OR "ai engineer" OR "data scientist" OR "applied scientist"';
+// Per-(domain, role) fan-out, same shape as brave-search.js. SerpAPI's free
+// tier is 100/month, so cap the role count tighter than Brave. Roles come from
+// the user's seeds (ctx.queries) — no hardcoded role vocabulary.
+const SERP_MAX_ROLES = 4;
 
 function siteClauseFor(domain) {
   if (domain.raw) return `site:${domain.raw}`;
@@ -90,31 +83,29 @@ function siteClauseFor(domain) {
 }
 
 function buildSiteQueries(queries, filters) {
+  // Roles come from the user's seeds. With none, there is nothing to search.
+  const roles = roleStrings({ queries }, { max: SERP_MAX_ROLES, quoted: true });
+  if (!roles.length) return [];
+
   const afterClause = filters.maxAgeDays ? ` after:${dateCutoff(filters.maxAgeDays)}` : '';
   const out = [];
   const locations = [...new Set(queries.map(q => q.location).filter(Boolean))];
   const remoteHint = filters.remoteOnly ? ' remote' : '';
+  const loc = () => (filters.remoteOnly ? '' : (locations[0] || ''));
 
   // Do not fabricate a 'Remote' location from the search hint; leave it empty
   // (or the non-remote seed location) and let enrichment verify from the JD.
   for (const domain of ATS_DOMAINS) {
     const site = siteClauseFor(domain);
-    for (const role of SERP_ROLE_PATTERNS) {
-      out.push({
-        query: `${site} ${role}${remoteHint}${afterClause}`,
-        domain,
-        location: filters.remoteOnly ? '' : (locations[0] || ''),
-      });
+    for (const role of roles) {
+      out.push({ query: `${site} ${role}${remoteHint}${afterClause}`, domain, location: loc() });
     }
   }
 
+  const orClause = roles.join(' OR ');
   for (const domain of [...COMPANY_SITES, ...STARTUP_SITES]) {
     const site = siteClauseFor(domain);
-    out.push({
-      query: `${site} (${SERP_FALLBACK_OR})${remoteHint}${afterClause}`,
-      domain,
-      location: filters.remoteOnly ? '' : (locations[0] || ''),
-    });
+    out.push({ query: `${site} (${orClause})${remoteHint}${afterClause}`, domain, location: loc() });
   }
   return out;
 }

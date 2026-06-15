@@ -40,18 +40,19 @@ If either fails, present breakdown and ask before generating resume.
 
 ---
 
-## Archetype Detection
+## Archetype Detection (optional)
 
-Classify every JD into one of 6 archetypes. The archetype drives which portfolio evidence to emphasize.
+Archetypes are optional emphasis buckets that bias which of your portfolio domains a resume leads with for a given JD. NONE ship by default: with no archetype config, every JD is treated as `General` and evidence is ranked purely by JD-keyword overlap -- the right default for most users and every field.
 
-| Archetype | Detection Keywords | Portfolio Emphasis |
-|---|---|---|
-| AI Platform / LLMOps | LLM, platform, infrastructure, serving, inference, MLOps, model deployment | A1 (agents, embedding server), A5 (on-device inference), A9 (GCP pipelines) |
-| Agentic / Automation | agent, automation, workflow, orchestration, tool calling, MCP, function calling | A1 (autonomous operations platform, safety enforcement, competitive intelligence system), A5 (on-device meeting assistant) |
-| Applied ML | recommendation, ranking, search, ads, personalization, applied ML | A2 (forecasting), A10 (audience modeling), A11 (MMM, regression) |
-| Causal / Experimentation | causal, experiment, A/B test, incrementality, measurement, attribution | A3 (survival, propensity), A4 (GeoLift, SDID), A8 (change point) |
-| ML Infrastructure | pipeline, Airflow, Spark, data platform, feature store, batch, streaming, ETL | A2 (forecast orchestration), A9 (GCP BigQuery), A10 (Databricks/PySpark) |
-| Forward Deployed | customer-facing, solutions, implementation, consulting, enterprise deployment | A1 (competitive intelligence skill), A12 (full-stack recommendation platform), prior agency client work |
+To use them, define your own in `configs/archetypes.json` and tag your `data/bullet-library.json` bullets with matching `archetypes[]`:
+
+```json
+{
+  "Your Bucket Name": { "keywords": ["a term", "another term"], "portfolioDomains": ["A1", "A2"] }
+}
+```
+
+`lib/archetypes.js` then classifies each JD into your best-matching bucket (or `General` if none match), and bullet-select gives archetype-matched bullets a small ranking boost. The buckets, their keywords, and their emphasis are entirely yours -- define them around your own field, or skip them.
 
 ---
 
@@ -63,7 +64,7 @@ However, the REASONING these frameworks produce MUST come through in the output 
 
 **1. Fragility**: Claims backed by deep repos (3,000+ lines) are antifragile. Claims backed by a single notebook are fragile. Lead with antifragile. Never bluff.
 
-**2. Antifragility**: Agent systems, on-device inference, causal inference, deep statistics gain value as the field shifts. Make them the resume's spine.
+**2. Antifragility**: Deep, hard-to-commoditize capabilities -- the ones backed by your strongest evidence -- gain value as your field shifts. Make those the resume's spine; lead with what stays valuable, not with the most common keyword.
 
 **3. Asymmetric Opportunities**: Include 1-2 projects the JD doesn't ask for but the team would value. Small risk (one wasted bullet), large upside (memorable candidate).
 

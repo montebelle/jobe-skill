@@ -17,10 +17,9 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { roleStrings, makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'smartrecruiters';
-const ML_REGEX = /\b(machine learning|ml engineer|ai engineer|applied scien|research engineer|research scien|data scien|mlops|llm|genai|deep learning|computer vision|nlp|quantitative research|advanced analytics|principal data|computational biolog|bioinformatic|member of technical staff)\b/i;
-const KEYWORDS = ['machine learning', 'data scientist', 'artificial intelligence', 'mlops'];
 
 function loadCompanies() {
   const p = path.join(getProjectRoot(), 'data/companies/non-tech-seed.json');
@@ -50,19 +49,22 @@ async function discover(ctx) {
     logger.info(`[${ID}] no SmartRecruiters companies seeded; skipping`);
     return [];
   }
+  const titleOk = makeTitleMatcher(ctx);
+  const terms = roleStrings(ctx, { max: 4 });
+  if (!terms.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
   logger.info(`[${ID}] scanning ${companies.length} SmartRecruiters companies`);
 
   const all = [];
   const seen = new Set();
   for (const c of companies) {
     let found = 0;
-    for (const q of KEYWORDS) {
+    for (const q of terms) {
       try {
         const data = await fetchPostings(c.companyId, q);
         if (!data || !Array.isArray(data.content)) continue;
         for (const p of data.content) {
           const title = p.name || p.title;
-          if (!title || !ML_REGEX.test(title)) continue;
+          if (!title || !titleOk(title)) continue;
           const postingId = p.uuid || p.id || p.refNumber;
           if (!postingId) continue;
           const url = `https://jobs.smartrecruiters.com/${c.companyId}/${postingId}`;
@@ -88,7 +90,7 @@ async function discover(ctx) {
       }
     }
     if (found > 0) {
-      logger.info(`[${ID}] ${c.companyId} (${c.industry || '?'}) -> ${found} ML roles`);
+      logger.info(`[${ID}] ${c.companyId} (${c.industry || '?'}) -> ${found} roles`);
     }
   }
   return all;

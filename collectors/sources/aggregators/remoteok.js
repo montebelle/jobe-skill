@@ -16,20 +16,16 @@
  */
 
 const { createPosting } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'remoteok';
 
-// Title-only filter. Tag-based inclusion was tried first and leaked broadly
-// (RemoteOK tags "ai"/"ml" appear on HR and merchandising posts), so role
-// relevance is decided on the position title alone.
-const ROLE_MATCH = /\b(machine[\s-]*learning|ml engineer|mlops|deep learning|llm|data scien|applied scientist|artificial intelligence|ai engineer|ai\/ml|ml\/ai|data engineer)\b/i;
+// RemoteOK has no search param: pull the feed and filter titles locally against
+// the user's target roles. Tag-based inclusion was tried first and leaked
+// broadly, so relevance is decided on the position title alone.
 
 function stripHtml(html) {
   return (html || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function roleRelevant(job) {
-  return ROLE_MATCH.test(job.position || '');
 }
 
 function withinAge(iso, maxAgeDays) {
@@ -47,6 +43,7 @@ function comp(job) {
 async function discover(ctx) {
   const { filters, logger } = ctx;
   const maxAgeDays = filters.maxAgeDays || 30;
+  const titleOk = makeTitleMatcher(ctx);
 
   let feed;
   try {
@@ -65,7 +62,7 @@ async function discover(ctx) {
   const jobs = feed.filter(j => j && j.position && j.company);
   const all = [];
   for (const j of jobs) {
-    if (!roleRelevant(j)) continue;
+    if (!titleOk(j.position || '')) continue;
     if (!withinAge(j.date, maxAgeDays)) continue;
     // RemoteOK location strings look like "Remote", "🌏 Worldwide",
     // "🇺🇸 United States". Normalize to ASCII-ish for the classifier.
@@ -83,7 +80,7 @@ async function discover(ctx) {
     }, ID);
     if (p) all.push(p);
   }
-  logger.info(`[${ID}] feed ${jobs.length} jobs -> ${all.length} ML/AI/DS within ${maxAgeDays}d`);
+  logger.info(`[${ID}] feed ${jobs.length} jobs -> ${all.length} matching within ${maxAgeDays}d`);
 
   const seen = new Set();
   return all.filter(p => !seen.has(p.canonicalUrl) && seen.add(p.canonicalUrl));

@@ -66,7 +66,7 @@ flowchart TB
    - Pass 3: MinHash LSH over bigram shingles with Jaccard ≥ 0.70.
 4. **Quick-rank → enrich → full-rank**. Quick-rank uses title heuristics and a 5-bucket score. Enrichment is lazy — only the top-K (default 60) postings get full JD fetch + compensation extraction + 30-day cache. Full-rank fuses four independent scorers (portfolio match density, seniority, freshness, JD-keyword density) through RRF with k=60.
 5. **Ghost-job detection** (`lib/ghost-score.js`) runs over the full-ranked set and attaches `ghostScore` + confidence label to each posting.
-6. **Archetype detection** (`lib/archetypes.js`) classifies each posting into one of six archetypes based on keyword density; the archetype drives which portfolio evidence the evaluation block emphasizes.
+6. **Archetype detection** (`lib/archetypes.js`) is optional: with a user-defined `configs/archetypes.json` it classifies each posting into one of those buckets by keyword density; with none it returns `General`. The archetype biases which portfolio evidence the evaluation block emphasizes (and is a no-op under `General`, where evidence ranks by JD-keyword overlap).
 7. **Evaluation** (A–G blocks) runs per-posting. Block B spawns three parallel sub-agents defined in `.claude/agents/jobe-*.md`.
 8. **Rendering** (`scripts/render-*.js`) produces ATS-normalized DOCX + cover letter + optional PPTX positioning deck. Normalization strips em-dashes / smart quotes / non-ASCII Unicode in both renderers.
 9. **Persistence**. Raw source outputs, merged postings, filtered postings, ranked postings, and enriched postings are each written per-run under `signals/discovered/{date}/` so any stage can be inspected after the fact.

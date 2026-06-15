@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadEnv, getProjectRoot } = require('../lib/config');
 const { enrich } = require('../lib/enrich');
-const { fullScore, fuseRanking } = require('../lib/rank');
+const { buildProfile, fullScore, fuseRanking } = require('../lib/rank');
 
 loadEnv();
 
@@ -31,6 +31,7 @@ function parseArgs() {
 async function main() {
   const opts = parseArgs();
   const root = getProjectRoot();
+  const profile = buildProfile({ root });
 
   // Default: yesterday's ranked-all.json (or today's if available)
   let from = opts.from;
@@ -54,9 +55,9 @@ async function main() {
   })));
 
   for (const p of topK) {
-    if (p.jdText) fullScore(p);
+    if (p.jdText) fullScore(p, { profile });
   }
-  const refused = fuseRanking(topK);
+  const refused = fuseRanking(topK, { profile });
 
   const outFile = path.join(root, from, 'ranked-enriched.json');
   const tmp = `${outFile}.tmp.${process.pid}`;

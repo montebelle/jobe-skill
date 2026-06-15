@@ -183,6 +183,20 @@ Write `data/companies/negative-list.json` with the `companySlugs[]` array.
 
 ---
 
+## Step 6.5: Discovery seeds (writes `data/queries/seeds.json`)
+
+This is the step that makes discovery search for YOUR roles instead of the shipped examples. Take the **target role titles** (Step 1.10) and **target locations** (Step 1.11) and write one seed per (role x location) pair.
+
+- For each target role title, emit one entry per target location. If the user is remote-only, use `"location": "Remote"`. If hybrid/onsite, emit one `"Remote"` entry (most roles cross-list) plus one per named metro.
+- Set `"archetype": "any"` for every entry UNLESS the user's portfolio is ML/AI (the Step 3 archetypes apply) — only then tag entries with the relevant archetype from the 6-archetype list. For all other fields (healthcare, finance, marketing, ops, trades, etc.) leave it `"any"`.
+- Keep it to roughly 8-20 pairs. More roles widen recall but dilute relevance.
+
+Write `data/queries/seeds.json` as `{ "$schema": "...", "queries": [ { "query", "location", "archetype" }, ... ] }`, replacing the shipped industry-neutral examples. Show the user the generated list and let them add or remove rows.
+
+**Target employers / non-tech industries.** The Workday / SmartRecruiters / iCIMS sources read `data/companies/non-tech-seed.json`, which ships with ~24 employers across finance, pharma, retail, media, healthcare, energy, auto, advertising, consulting, and more — this is how Jobe reaches non-tech industries (those employers rarely use Greenhouse/Lever/Ashby). If the user names specific target employers in a non-tech field, add them there: each Workday entry needs `host` + `tenant` + `site`, SmartRecruiters needs `companyId`, iCIMS needs `host`. (`slug-harvest` also grows the tech-side index automatically over time, so the shipped `configs/portals.json` is only a starting seed.)
+
+---
+
 ## Step 7: Smoke test
 
 Run a small discovery + evaluate cycle so the user sees something real:
@@ -209,6 +223,7 @@ Files written:
   data/bullet-library.json                       ({Step 4 — total B bullets across K role-keys})
   .env                                           ({Step 5 — keys: brave/serpapi/github})
   data/companies/negative-list.json              ({Step 6})
+  data/queries/seeds.json                        ({Step 6.5 — Q (role x location) pairs in your field})
 
 Next steps:
   /jobe find                # full discovery + auto-evaluate top matches
@@ -220,6 +235,7 @@ To re-run any step:
   /jobe onboard resume      # resume + bullet-library
   /jobe onboard evidence    # portfolio reference
   /jobe onboard keys        # API keys
+  /jobe onboard seeds       # regenerate discovery seeds (roles x locations)
 ```
 
 ---

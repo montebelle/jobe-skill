@@ -151,7 +151,7 @@ Every source emits raw `Posting[]` in a canonical schema. `lib/dedup.js` then ru
 
 ### Phase 2: Filter, enrich, score
 
-Filters apply: recency window (30 days, +15 for senior / staff per *Review of Accounting Studies 2023*), location (remote / US / hybrid based on `_profile.md`), role gate (a permissive ML-vocab regex plus an exclusion list — not a brittle whitelist of exact title strings), queue, negative list.
+Filters apply: recency window (30 days, +15 for senior / staff per *Review of Accounting Studies 2023*), location (remote / US / hybrid based on `_profile.md`), role gate (posting titles matched against your target-role tokens from `data/queries/seeds.json`; permissive when you have no seeds yet), queue, negative list.
 
 Every gate-passing posting (default cap 300) gets enriched: JD text fetched, compensation extracted, 30-day cached. Then `fullScore` runs on JD content (50 baseline + signal-based deltas, clamped to [0, 100]). Pre-enrich `quickScore` only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost); it does not gate.
 
@@ -258,12 +258,12 @@ Bullets are not LLM-generated at evaluate-time. They are pre-written by you in `
 
 ### Can I use Jobe for non-ML / non-AI roles?
 
-The framework is general — it doesn't hardcode ML as the target domain. But two pieces are tuned for ML / AI / Data Science:
+Yes — Jobe assumes nothing about your field. Discovery, the title gate, and ranking all derive from YOUR profile, with no hardcoded role vocabulary anywhere:
 
-- The role gate (`lib/rank.js` `ML_VOCAB`) filters titles by ML-vocab keywords. Edit it to broaden.
-- The 6 archetypes (AI Platform / Agentic / Applied ML / Causal / ML Infrastructure / Forward Deployed) are ML-themed. Replace them in `lib/archetypes.js` with archetypes for your field, then retag your bullet library accordingly.
+- `/jobe onboard` writes your target roles into `data/queries/seeds.json`. Every source builds its queries from those seeds (`lib/role-queries.js`), and `lib/rank.js` matches + scores postings against your target-role tokens and your `data/bullet-library.json` keywords.
+- Archetypes (emphasis buckets) are optional. None ship by default — postings classify as `General` and evidence is ranked purely by JD-keyword overlap. To add your own, drop a `configs/archetypes.json` (`{ "Bucket": { "keywords": [...], "portfolioDomains": [...] } }`) and tag your bullet library to match.
 
-If you do this, please open a PR — having multiple field configurations in the repo would be a community win.
+A nurse, accountant, or marketer gets nurse / accountant / marketing discovery with **no code edits**. (Before setup — empty seeds — discovery is permissive and thin; run `/jobe onboard` first.)
 
 ### How do I update Jobe?
 

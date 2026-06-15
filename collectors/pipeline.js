@@ -25,7 +25,8 @@ const path = require('path');
 
 const { loadEnv, getProjectRoot } = require('../lib/config');
 const { dedup } = require('../lib/dedup');
-const { quickScore, fullScore, fuseRanking, isRoleMatch } = require('../lib/rank');
+const { buildProfile, quickScore, fullScore, fuseRanking, isRoleMatch } = require('../lib/rank');
+const { roleStrings } = require('../lib/role-queries');
 const { enrich } = require('../lib/enrich');
 const { ghostScore } = require('../lib/ghost-score');
 const { mergeIntoIndex } = require('../lib/tracker-stats');
@@ -75,13 +76,10 @@ function loadSources(onlyId = null) {
 function loadSeedQueries() {
   const p = path.join(ROOT, 'data', 'queries', 'seeds.json');
   if (!fs.existsSync(p)) {
-    return [
-      { query: 'Senior Machine Learning Engineer', location: 'New York' },
-      { query: 'Staff Machine Learning Engineer', location: 'New York' },
-      { query: 'Machine Learning Engineer', location: 'Remote' },
-      { query: 'AI Engineer', location: 'New York' },
-      { query: 'Senior Data Scientist', location: 'New York' },
-    ];
+    // No seeds yet. Discovery is driven by the user's target roles, which
+    // `/jobe onboard` writes here. With none, return [] (sources that need
+    // query terms contribute nothing) rather than assuming any field.
+    return [];
   }
   return JSON.parse(fs.readFileSync(p, 'utf8')).queries || [];
 }
@@ -175,7 +173,7 @@ function loadNegativeList() {
   try { return new Set(JSON.parse(fs.readFileSync(p, 'utf8')).companySlugs || []); } catch { return new Set(); }
 }
 
-function applyFilters(postings, filters) {
+function applyFilters(postings, filters, profile) {
   const queueUrls = loadQueueUrls();
   const negative = loadNegativeList();
   // Seniority-aware recency: senior/staff IC vacancies stay open longer
@@ -188,8 +186,9 @@ function applyFilters(postings, filters) {
   const rejected = { recency: 0, location: 0, role: 0, queue: 0, negative: 0, nonRemote: 0 };
 
   for (const p of postings) {
-    // Role
-    if (!isRoleMatch(p.title)) { rejected.role++; continue; }
+    // Role: match the posting title against the user's target-role tokens.
+    // Permissive (keeps everything) when the user has no seeds configured yet.
+    if (!isRoleMatch(p.title, profile)) { rejected.role++; continue; }
     // Negative list
     if (negative.has(p.companySlug)) { rejected.negative++; continue; }
     // Queue
@@ -279,6 +278,10 @@ async function run(opts = {}) {
   };
 
   const queries = opts.queries || loadSeedQueries();
+  const profile = buildProfile({ queries, root: ROOT });
+  if (!profile.configured) {
+    log.warn('no target roles configured (data/queries/seeds.json is empty) — run `/jobe onboard`. Discovery will be permissive and thin.');
+  }
 
   const sources = loadSources(opts.onlySource);
   log.info(`sources loaded: ${sources.map(s => s.id).join(', ')}`);
@@ -306,6 +309,7 @@ async function run(opts = {}) {
       const harvest = await harvestSlugs({
         apiKey: auth.braveApiKey,
         maxAgeDays: filters.maxAgeDays,
+        roleTails: roleStrings({ queries }, { max: 3, quoted: true }),
         logger: mkLogger('slug-harvest '),
       });
       log.info(`slug-harvest: +${harvest.harvested} new slugs across ${harvest.queriesRun} queries (index: ${harvest.indexSize})`);
@@ -349,7 +353,7 @@ async function run(opts = {}) {
   log.info(`company index now has ${totalKnown} companies`);
 
   // ── Filter ──
-  const { kept, rejected } = applyFilters(deduped, filters);
+  const { kept, rejected } = applyFilters(deduped, filters, profile);
   log.info(`after filter: ${kept.length} (rejected: role=${rejected.role} recency=${rejected.recency} loc=${rejected.location} non-remote=${rejected.nonRemote} queue=${rejected.queue} negative=${rejected.negative})`);
   persist(deduped, 'merged');
   persist({ filters, rejected, kept: kept.length }, 'filter-report');
@@ -371,9 +375,9 @@ async function run(opts = {}) {
   log.info(`ghost filter: ${kept.length - shownKept.length} Suspicious hidden (${opts.showGhosts ? 'shown via --show-ghosts' : 'use --show-ghosts to see'})`);
 
   // ── Quick rank + RRF fusion ──
-  for (const p of shownKept) quickScore(p);
-  // RRF-fused ordering (portfolio density + seniority + freshness + jd)
-  const fused = fuseRanking(shownKept);
+  for (const p of shownKept) quickScore(p, { profile });
+  // RRF-fused ordering (profile-keyword overlap + seniority + freshness)
+  const fused = fuseRanking(shownKept, { profile });
   shownKept.splice(0, shownKept.length, ...fused);
 
   // ── Enrich top-K ──
@@ -398,7 +402,7 @@ async function run(opts = {}) {
   // from full enrichment or a fallback search-result snippet pre-attached
   // by brave/serpapi — gets a real matchScore. ──
   for (const p of topK) {
-    if (p.jdText) fullScore(p);
+    if (p.jdText) fullScore(p, { profile });
   }
 
   // ── STRICT post-enrich gate: now that remote/us/postedDate reflect the real
@@ -411,7 +415,7 @@ async function run(opts = {}) {
   // Compute RRF fields (used as a tiebreak + diagnostic) then order by the
   // JD-aware matchScore so the displayed score and the list order agree.
   // Postings with no JD (matchScore null) sink to the bottom.
-  fuseRanking(finalList);
+  fuseRanking(finalList, { profile });
   finalList.sort((a, b) =>
     ((b.matchScore ?? -1) - (a.matchScore ?? -1)) || ((b.rrfScore || 0) - (a.rrfScore || 0))
   );

@@ -22,9 +22,9 @@ else JOBE_HOME=""; fi
 
 ## Block A: Role Summary
 
-1. **Detect archetype** from JD keywords (see _shared.md Archetype Detection table)
+1. **Detect archetype** (optional; see _shared.md Archetype Detection). With no `configs/archetypes.json`, treat as `General`.
 2. Output:
-   - Archetype: [AI Platform / Agentic / Applied ML / Causal / ML Infra / Forward Deployed]
+   - Archetype: [your configured bucket, or General]
    - Domain: [adtech, fintech, healthcare, CPG, etc.]
    - Seniority: [junior / mid / senior / staff / principal]
    - Remote: [remote / hybrid / onsite]
@@ -130,7 +130,7 @@ Generate the tailored resume following ALL rules from _shared.md:
 - ATS format rules (single column, Calibri, 475-600 words, 70%+ keyword match)
 - Content rules (XYZ formula, quantified impact, JD exact phrasing, no buzzwords)
 - Talebian lens decisions from Block C (what to lead with, what to cut, how to frame gaps)
-- Archetype from Block A drives which portfolio domains to emphasize
+- Archetype from Block A (if configured) biases which evidence to emphasize; under General, lead with the highest JD-overlap evidence
 - No em-dashes, en-dashes, smart quotes, or Unicode
 
 Generate the cover letter following cover letter rules, Reasoning-First rules from _shared.md, AND Content Differentiation Rules:
@@ -156,9 +156,8 @@ Read `data/story-bank.md`. For each JD requirement, find matching stories.
 Output a mapping matrix:
 | JD Requirement | Best Story | Fit | Metric to Cite |
 |---|---|---|---|
-| Production ML systems | 13-Model Forecasting | Strong | 700+ paths, 24h turnaround |
-| Safety / guardrails | Output Gate | Strong | Zero incidents across 28 pipelines |
-| Causal inference | GeoLift 5-Gate | Strong | MDE 7.5% at 80% power |
+| (core requirement from the JD) | (your strongest matching story) | Strong | (the number that proves it) |
+| (secondary requirement) | (supporting story) | Partial | (metric or scope) |
 
 For requirements with no Strong match, suggest talking points from portfolio evidence.
 Append any new STAR+R stories discovered during this evaluation to `data/story-bank.md`.

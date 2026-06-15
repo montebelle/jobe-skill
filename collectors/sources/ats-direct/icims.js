@@ -18,10 +18,9 @@ const path = require('path');
 const fs = require('fs');
 const { createPosting, stripHtml } = require('../../../lib/posting');
 const { getProjectRoot } = require('../../../lib/config');
+const { roleStrings, makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'icims';
-const ML_REGEX = /\b(machine learning|ml engineer|ai engineer|applied scien|research engineer|research scien|data scien|mlops|llm|genai|deep learning|computer vision|nlp|quantitative research|advanced analytics|principal data|computational biolog|bioinformatic|member of technical staff)\b/i;
-const KEYWORDS = ['machine learning', 'data scientist', 'artificial intelligence'];
 
 function loadTenants() {
   const p = path.join(getProjectRoot(), 'data/companies/non-tech-seed.json');
@@ -47,7 +46,7 @@ async function fetchSearch(host, keyword) {
   return res.text();
 }
 
-function parseListings(html, host) {
+function parseListings(html, host, titleOk) {
   // iCIMS listing anchors look like:
   //   <a href="/jobs/12345/some-title/job" ...>Some Title</a>
   // Location typically lives in the same table row (td.iCIMS_JobLocation) or
@@ -60,7 +59,7 @@ function parseListings(html, host) {
     const hrefPath = m[1];
     const jobId = m[2];
     const title = stripHtml(m[3]).trim();
-    if (!title || !ML_REGEX.test(title)) continue;
+    if (!title || !titleOk(title)) continue;
 
     // Locate a nearby location string: scan +400 chars after the anchor
     const windowText = html.slice(m.index, m.index + 800);
@@ -86,17 +85,20 @@ async function discover(ctx) {
     logger.info(`[${ID}] no iCIMS tenants seeded; skipping`);
     return [];
   }
+  const titleOk = makeTitleMatcher(ctx);
+  const terms = roleStrings(ctx, { max: 3 });
+  if (!terms.length) { logger.info(`[${ID}] no seed roles; skipping`); return []; }
   logger.info(`[${ID}] scanning ${tenants.length} iCIMS tenants`);
 
   const all = [];
   const seen = new Set();
   for (const tenant of tenants) {
     let found = 0;
-    for (const kw of KEYWORDS) {
+    for (const kw of terms) {
       try {
         const html = await fetchSearch(tenant.host, kw);
         if (!html) continue;
-        const listings = parseListings(html, tenant.host);
+        const listings = parseListings(html, tenant.host, titleOk);
         for (const l of listings) {
           if (seen.has(l.url)) continue;
           seen.add(l.url);
@@ -117,7 +119,7 @@ async function discover(ctx) {
       }
     }
     if (found > 0) {
-      logger.info(`[${ID}] ${tenant.host} (${tenant.industry || '?'}) -> ${found} ML roles`);
+      logger.info(`[${ID}] ${tenant.host} (${tenant.industry || '?'}) -> ${found} roles`);
     }
   }
   return all;
