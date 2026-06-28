@@ -27,7 +27,9 @@ data/followups.md
 data/apply-queue.json
 data/contacts.json
 data/resume-baseline.json
+data/bullet-library.json
 data/companies/index.json
+data/apply-profile.json
 
 # Run artifacts (anchored to repo root so web/src/{components,app}/reports/
 # are not caught by the pattern)

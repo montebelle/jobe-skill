@@ -11,6 +11,7 @@ These files contain user-specific data. Install scripts create them only if they
 - `data/followups.md` - Follow-up cadence tracking
 - `data/apply-queue.json` - Ordered apply queue with applied/skipped status
 - `data/contacts.json` - Referral network for `/jobe contacto`
+- `data/apply-profile.json` - Optional apply-harness answers not in a resume (work authorization, salary target, "how did you hear about us", and OPT-IN EEO self-identification). Copy from `templates/apply-profile.template.json`; EEO declines by default.
 - `data/resume-baseline.json` - Most recent tailored resume (user-edited)
 - `data/companies/index.json` - Emergent company index (grows every discovery run; user can curate)
 - `modes/_profile.md` - User identity, contact, preferences
@@ -72,3 +73,4 @@ Not user-layer; not system-layer. Disposable per-run output, safe to delete.
 
 - `signals/discovered/{date}/` - Per-run raw, merged, filtered, ranked, enriched posting sets (one JSONL per stage).
 - `signals/cache/jd/` - 30-day JD-fetch cache, sha1-keyed.
+- `signals/apply/{slug}/` - Camoufox apply harness channel: `state.json` (harness -> agent), `control.json` (agent -> harness), and `preview.png` (the glance screenshot). Disposable per application.

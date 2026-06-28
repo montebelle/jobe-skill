@@ -1,152 +1,92 @@
 # Apply Mode
 
-Fill out a job application form using Chrome browser automation. ALWAYS human-in-the-loop: fills everything, shows what was filled, waits for explicit "submit" approval.
+Fill out and submit ONE job application using **Camoufox stealth automation** (the default). Camoufox is a patched Firefox that does not leak the `navigator.webdriver` / DevTools fingerprints a CDP-driven Chrome leaks, so it does not trip the automation-detection + email-confirmation walls that broke the old Chrome path. Flow: auto-fill → quick glance (screenshot + field summary) → submit → handle any email confirmation → record.
+
+The agent orchestrates `scripts/camoufox-apply.js` (the browser harness) through a tiny file channel, because the harness (Node) and the Gmail MCP tools live in different layers and cannot call each other directly.
 
 ## Input
-`$ARGUMENTS` after "apply": a company-role slug (matching a reports/ folder) or a URL.
+`$ARGUMENTS` after "apply": a company-role slug (matching a `reports/{slug}/` folder) or a URL.
+Flags: `--paste` (skip the browser, fall back to paste-ready blocks — see apply-assisted.md, for login-walled forms) · `--headful` is the default (visible window); pass `--headless` for an unattended run.
 
 ## Prerequisites
+1. A completed evaluation in `reports/{slug}/` with a resume JSON + DOCX (and ideally a cover letter DOCX). If none exists, run `/jobe [url]` (evaluate) first.
+2. `camoufox-js` + `playwright-core` installed and the binary fetched (`npx camoufox-js fetch`). One-time.
+3. `modes/_profile.md` contact info, and (optionally) `data/apply-profile.json` for work authorization + EEO choices — the harness pulls contact + answers from the report JSON + that profile via `lib/apply/answers.js`.
 
-1. A completed evaluation must exist in `reports/{slug}/` with resume JSON and DOCX
-2. Chrome MCP tools must be available (Claude in Chrome extension connected)
-3. `_profile.md` must have contact info
-
-## Step 1: Load Application Data
-
-Read from the evaluation:
-- `reports/{slug}/resume-{date}-{slug}.json` for structured resume data
-- `reports/{slug}/resume-{date}-{slug}.docx` for file upload
-- Contact info from `modes/_profile.md`
-- Cover letter text from the JSON's `coverLetter` field
-
-## Step 2: Navigate to Application Page
-
+## Step 1: Launch the harness (background, holds the form open)
+```bash
+node scripts/camoufox-apply.js run {slug} [--url {override}] [--headless] &
 ```
-Use mcp__Claude_in_Chrome__tabs_context_mcp to get current tabs.
-Use mcp__Claude_in_Chrome__tabs_create_mcp to open a new tab.
-Use mcp__Claude_in_Chrome__navigate to go to the job posting URL.
+Run it in the **background** — the process keeps the browser alive across the glance and the email-confirm step. It writes status to `signals/apply/{slug}/state.json` and waits for the agent to write `signals/apply/{slug}/control.json`.
+
+The harness automatically: navigates, **verifies the live posting matches the user's location filter and aborts (`phase:"blocked-location"`) if it is out of scope** (defense-in-depth against a discovery leak; override with `--allow-onsite`), clicks Apply if the form is not inline, fills contact fields + the Location combobox, uploads the resume DOCX (uploaded LAST so ATS resume-autofill re-renders do not invalidate earlier fields), handles EEO questions per the user's apply-profile (declining by default), and **detects free-text + choice custom questions without inventing answers** — they come back in `state.questions[]` (with `type` and, for choice widgets, `options`).
+
+## Step 2: Wait for the fill, then answer custom questions
+Poll `signals/apply/{slug}/state.json` until `phase === "filled"`. Read `filled`, `unfilled`, and `questions`.
+
+For each entry in `questions[]`, WRITE a grounded answer (this is the agent's job — never let the harness guess):
+- Pull evidence from `reports/{slug}/resume-*.json` (summary, experience bullets) and the analysis markdown.
+- Follow `_shared.md` anti-fabrication + the user's `reference.md` evidence. Real metrics only. No internal project names. **ATS-clean: no `< > [ ] { } " \`** (the harness types raw text — it does NOT run `lib/normalize.js`).
+- Apply the Content Differentiation Rules (below): each field leads with different evidence.
+
+Inject the answers (matched by label substring, re-scanned to survive re-render):
+```bash
+node -e 'require("fs").writeFileSync("signals/apply/{slug}/control.json", JSON.stringify({action:"answers", answers:[{label:"<question label substring>", text:"<answer>"}]}))'
 ```
+Poll `state.json` for the updated `answeredIdx` (`ok:true`). Repeat if multiple questions.
 
-Find the "Apply" button:
+## Step 3: The glance (always shown before submit)
+Read `signals/apply/{slug}/preview.png` and present to the user:
 ```
-Use mcp__Claude_in_Chrome__find with query "apply button" or "apply now"
-Click it to open the application form.
+=== APPLICATION GLANCE: {company} - {role} ===
+Name / Email / Phone / Location / LinkedIn:  <values>
+Resume uploaded: yes ({file})
+Custom Q answers: <one-line each>
+Could-not-fill: <unfilled[]>  (if any required, STOP and ask the user)
+Screenshot: signals/apply/{slug}/preview.png
 ```
+This is the glance checkpoint. If `unfilled[]` contains a REQUIRED field, or the screenshot shows a CAPTCHA / login wall, STOP and hand control to the user (re-run `--headful` so they can intervene). Otherwise proceed.
 
-## Step 3: Read the Form
-
+## Step 4: Submit
+```bash
+node -e 'require("fs").writeFileSync("signals/apply/{slug}/control.json", JSON.stringify({action:"submit"}))'
 ```
-Use mcp__Claude_in_Chrome__read_page to get all form fields.
-```
+Poll `state.json` for `phase === "submitted"`. Read `postSubmitExcerpt` (the success/confirmation text) and `needsEmailConfirm`.
 
-Identify field types:
-- **Contact fields**: name, email, phone, location, LinkedIn URL
-- **Resume upload**: file input for resume/CV
-- **Cover letter**: text area or file upload
-- **Work authorization**: dropdown or radio (select "Yes" if authorized)
-- **Experience fields**: current company, title, years
-- **Education fields**: school, degree, field of study
-- **Free-text questions**: "Why do you want to work here?", "Describe relevant experience", etc.
-- **Salary expectations**: use comp data from evaluation Block D
-- **Referral source**: select "Company website" or "Job board"
+## Step 5: Email confirmation (only if needed)
+If `needsEmailConfirm === true` (post-submit page says "confirm/verify your email", "check your inbox", "we sent…"):
+1. Use the Gmail MCP tools to find the most recent confirmation mail from the company/ATS (search sender domain + "confirm"/"verify"/"application"). Needs a one-time Gmail MCP auth — prompt the user if not yet authed.
+2. Extract the confirmation/verification link.
+3. Inject it into the SAME stealth session:
+   ```bash
+   node -e 'require("fs").writeFileSync("signals/apply/{slug}/control.json", JSON.stringify({action:"confirm", link:"<url>"}))'
+   ```
+4. Poll for `phase === "confirmed"`.
 
-## Step 4: Fill Fields
+If `needsEmailConfirm === false`, send `{action:"done"}` to close the browser cleanly.
 
-For each identified field:
+## Step 6: Record (real submission = record it)
+Using `lib/tracker-writer.js`:
+1. `moveReportFolder(slug, 'applied')` → relocates `reports/{slug}/` to `reports/applied/{slug}/`, rewrites queue docx paths + tracker `reportDir`.
+2. `updateTrackerStatus({slug, newStatus:'Applied'})` if the slug is in the tracker, else `appendTrackerRow({date, company, role, score, status:'Applied', reportDir, notes})`. Note "Camoufox auto-apply; submitted {date}; <on-page success | email-confirmed>".
+3. `updateQueueEntry(slug, {applied:true, appliedDate:TODAY})` if it is in the queue.
+4. Append a follow-up to `data/followups.md` (next follow-up = +7 days).
+5. Report success with the confirmation screenshot path.
 
-**Contact info** (from _profile.md):
-```
-Use mcp__Claude_in_Chrome__form_input to fill name, email, phone, LinkedIn.
-```
+If the user skipped: `{action:"skip"}` to the harness + `updateQueueEntry(slug, {skipped:true, skipReason})` + `updateTrackerStatus('Skipped')` + `moveReportFolder(slug, 'skipped')`.
 
-**Resume upload**:
-```
-Use mcp__Claude_in_Chrome__find to locate the file input element.
-Use mcp__Claude_in_Chrome__file_upload with the resume DOCX path.
-```
-
-**Cover letter**: 
-If text area: paste the coverLetter content from the JSON.
-If file upload: upload the cover-letter DOCX.
-
-**Work authorization**: Read from `_profile.md` (candidate's declared authorization status).
-
-**Experience/Education**: Fill from _profile.md and resume JSON.
-
-**Free-text questions**: Generate answers using:
-- The evaluation analysis (Block B portfolio match, Block F STAR stories)
-- JD requirements (from the JSON)
-- Company research (from the evaluation)
-- Keep answers concise (150-250 words per question)
-- Use specific metrics and projects, not generic statements
-- Apply Talebian lenses: lead with antifragile claims, address inversion concerns
-
-**Salary**: Use the midpoint from Block D compensation research. If the field is optional, leave blank.
-
-## Step 5: Review Before Submit
-
-CRITICAL: DO NOT CLICK SUBMIT. Instead:
-
-1. Take a screenshot of the filled form:
-```
-Use mcp__Claude_in_Chrome__computer with action "screenshot"
-```
-
-2. Show the user everything that was filled:
-```
-=== APPLICATION REVIEW ===
-
-Company: {company}
-Role: {role}
-URL: {posting URL}
-
-Fields filled:
-- Name: {candidate name from _profile.md}
-- Email: {candidate email from _profile.md}
-- Phone: {candidate phone from _profile.md}
-- Resume: {filename}.docx (uploaded)
-- Cover letter: {first 100 chars}...
-- Work authorization: Yes
-- [Free-text Q1]: {first 100 chars}...
-- [Free-text Q2]: {first 100 chars}...
-- Salary: {amount or "left blank"}
-
-READY TO SUBMIT. Type "submit" to proceed, or tell me what to change.
-```
-
-3. Wait for explicit user confirmation.
-
-## Step 6: Submit (only after approval)
-
-Only after the user explicitly says "submit", "yes", "go", or "send":
-
-```
-Use mcp__Claude_in_Chrome__find to locate the submit button.
-Use mcp__Claude_in_Chrome__computer with action "left_click" on the submit button.
-```
-
-After submission:
-1. Take a confirmation screenshot
-2. Update tracker: change status from "Evaluated" to "Applied" via `updateTrackerStatus({ slug, newStatus: 'Applied' })` from `lib/tracker-writer.js`
-3. Update queue: `updateQueueEntry(slug, { applied: true, appliedDate: TODAY })`
-4. Add entry to `data/followups.md` with next follow-up date (7 days from now)
-5. **Move report folder**: `moveReportFolder(slug, 'applied')` from `lib/tracker-writer.js` relocates `reports/{slug}/` -> `reports/applied/{slug}/` and rewrites the queue's resumeDocx + coverLetterDocx paths and the tracker.md reportDir column atomically.
-6. Report success to user
-
-If user skipped instead of submitting: `updateQueueEntry(slug, { skipped: true, skipReason })` + `updateTrackerStatus({ slug, newStatus: 'Skipped' })` + `moveReportFolder(slug, 'skipped')`.
-
-## Step 7: Handle Edge Cases
-
-- **Multi-page forms**: After each page, fill visible fields, click "Next", repeat
-- **CAPTCHA/bot detection**: Stop and tell user "I've encountered a CAPTCHA. Please complete it manually and tell me when done."
-- **Login required**: Stop and tell user "This application requires you to log in first. Please log in and tell me when ready."
-- **Form errors**: Screenshot the error, report to user, suggest fixes
-- **Required fields I can't fill**: List them and ask user to provide the information
+## Content Differentiation Rules
+Each field carries GENUINELY different evidence — no cross-field repetition.
+| Field | Lead With | Tone |
+|---|---|---|
+| Cover Letter | Strongest technical achievement + the WHY behind a design decision | Confident, analytical |
+| "Why {company}?" | Specific things about THEIR mission/product/team | Genuine, forward-looking |
+| Custom Questions | One narrow technical deep-dive not covered elsewhere | Precise, technical |
+Before writing any field, check what the others already say.
 
 ## NEVER
-
-- Never click Submit without explicit user approval
-- Never guess at answers for questions about disability, veteran status, or demographics (leave blank or select "Prefer not to answer")
-- Never enter salary information without asking the user first
-- Never create accounts on the user's behalf
-- Never enter passwords or authentication credentials
+- Never submit when a required field is unfilled or a CAPTCHA/login wall is on screen — hand to the user.
+- Never invent free-text answers — the harness returns questions for the agent to write from real evidence.
+- EEO / demographic questions: self-identification is OPT-IN and the user's own choice. By default the harness **declines** every demographic question. A user who wants to self-identify sets `eeoSelfIdentify: true` and fills `eeoValues` (with their OWN gender / race / veteran / disability / etc. answers) in `data/apply-profile.json`; the harness then matches those against each form's rendered options via `lib/apply/answers.js` `eeoValues` + `lib/apply/filler.js`. Any question with no value on file always declines.
+- Never automate the user's logged-in LinkedIn session (account-safety rule, hard). Camoufox uses a fresh fingerprinted session, not the user's profile.
+- Never enter passwords or create accounts on the user's behalf.

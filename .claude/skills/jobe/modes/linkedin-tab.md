@@ -3,7 +3,7 @@
 Pull job postings from the user's **own, already-open LinkedIn Jobs search tab** into the discovery pipeline. The user's logged-in session is never automated headlessly: the human opens the search, the agent only **reads** the visible page via the Chrome extension. This is the account-safe alternative to scraping LinkedIn (see `collectors/sources/aggregators/linkedin-guest.js` for the no-login public-endpoint source that runs inside `/jobe find`).
 
 ## Why this design
-- LinkedIn bans accounts for unattended automation. John's account is a career asset; it is never driven by a bot.
+- LinkedIn bans accounts for unattended automation. your account is a career asset; it is never driven by a bot.
 - Easy Apply-only and member-only listings are not visible to the logged-out guest endpoint — but they ARE visible in the user's own browser tab. Reading what the user already sees captures that slice with zero added account behavior.
 - The same dedup -> rank flow as `/jobe find` applies downstream, so manual captures merge cleanly with pipeline output.
 

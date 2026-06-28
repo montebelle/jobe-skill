@@ -15,11 +15,11 @@ Prepare for interviews using the story bank + JD analysis.
 
 | JD Requirement | Best Story | Fit | Key Metric |
 |---|---|---|---|
-| Production ML systems | 13-Model Forecasting | Strong | 700+ paths, 24h turnaround |
-| LLM/agent experience | Output Gate | Strong | 28 pipelines, zero incidents |
-| Causal inference | GeoLift 5-Gate | Strong | MDE 7.5%, 80% power |
-| Kubernetes | GCP Workbench | Partial | BigQuery/Cloud Functions, not K8s depth |
-| PhD preferred | N/A | Gap | Lead with Applied Math + statistical sophistication |
+| Core requirement #1 | &lt;your strongest project in this area&gt; | Strong | &lt;the headline number, e.g. multi-region, sub-day refresh&gt; |
+| Core requirement #2 | &lt;a project that shows this skill&gt; | Strong | &lt;scale or reliability metric, e.g. 20+ workflows, zero incidents&gt; |
+| Core requirement #3 | &lt;a project that shows this skill&gt; | Strong | &lt;a quantified outcome, e.g. 30% cost reduction&gt; |
+| Adjacent/secondary skill | &lt;closest related project&gt; | Partial | &lt;what you have vs. what is missing&gt; |
+| Stated preference you lack | N/A | Gap | &lt;the strength you lead with instead&gt; |
 
 5. **Generate likely interview questions** based on JD + company intel:
    - Technical: specific to the role's domain

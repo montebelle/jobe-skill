@@ -124,7 +124,7 @@ function buildSelectedProjects(projects) {
   const paragraphs = [sectionHeading('Selected Projects')];
   for (const p of projects) {
     if (!p || !p.summary) continue;
-    const titleText = p.name ? normalize(p.name) + ' - ' : '';
+    const titleText = p.name ? normalize(p.name) + ': ' : '';
     paragraphs.push(new Paragraph({
       spacing: { before: 60, after: 30, line: 276 },
       children: [
@@ -138,21 +138,39 @@ function buildSelectedProjects(projects) {
 
 function buildEducation(education) {
   const paragraphs = [sectionHeading('Education')];
-  const edu = Array.isArray(education) ? education[0] : education;
-  if (!edu) return paragraphs;
+  const list = Array.isArray(education) ? education : (education ? [education] : []);
+  for (let i = 0; i < list.length; i++) {
+    const edu = list[i];
+    if (!edu || !(edu.degree || edu.school)) continue;
+    paragraphs.push(new Paragraph({
+      spacing: { before: i === 0 ? 80 : 60, after: 20 },
+      tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
+      children: [
+        new TextRun({ text: edu.degree || '', font: FONT, size: 21, bold: true, color: BLACK }),
+        new TextRun({ text: edu.school ? `  |  ${edu.school}` : '', font: FONT, size: 21, color: CHARCOAL }),
+        new TextRun({ text: edu.location ? `  |  ${edu.location}` : '', font: FONT, size: 21, color: GRAY }),
+        new TextRun({ children: [new Tab()] }),
+        new TextRun({ text: edu.dates || '', font: FONT, size: 20, color: GRAY })
+      ]
+    }));
+  }
+  return paragraphs;
+}
 
-  paragraphs.push(new Paragraph({
-    spacing: { before: 80, after: 20 },
-    tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
-    children: [
-      new TextRun({ text: edu.degree || '', font: FONT, size: 21, bold: true, color: BLACK }),
-      new TextRun({ text: edu.school ? `  |  ${edu.school}` : '', font: FONT, size: 21, color: CHARCOAL }),
-      new TextRun({ text: edu.location ? `  |  ${edu.location}` : '', font: FONT, size: 21, color: GRAY }),
-      new TextRun({ children: [new Tab()] }),
-      new TextRun({ text: edu.dates || '', font: FONT, size: 20, color: GRAY })
-    ]
-  }));
-
+function buildAwards(awards) {
+  if (!Array.isArray(awards) || awards.length === 0) return [];
+  const paragraphs = [sectionHeading('Awards')];
+  for (const a of awards) {
+    if (!a) continue;
+    paragraphs.push(new Paragraph({
+      spacing: { after: 30, line: 276 },
+      indent: { left: convertInchesToTwip(0.25), hanging: convertInchesToTwip(0.2) },
+      children: [
+        new TextRun({ text: '•  ', font: FONT, size: 16, color: CHARCOAL }),
+        new TextRun({ text: normalize(a), font: FONT, size: 21, color: CHARCOAL })
+      ]
+    }));
+  }
   return paragraphs;
 }
 
@@ -203,7 +221,7 @@ function generate(inputPath) {
       spacing: { after: 40 },
       children: [
         new TextRun({
-          text: (raw.name || 'John T. Bell').toUpperCase(),
+          text: (raw.name || 'Your Name').toUpperCase(),
           font: FONT, size: 44, bold: true, color: NAVY, characterSpacing: 60
         })
       ]
@@ -231,12 +249,14 @@ function generate(inputPath) {
     // Skills
     ...buildSkills(raw.skills || {}),
     // Education
-    ...buildEducation(raw.education)
+    ...buildEducation(raw.education),
+    // Awards
+    ...buildAwards(raw.awards)
   ];
 
   const doc = new Document({
     creator: 'Jobe Positioning Intelligence',
-    title: `Resume - ${raw.name || 'John T. Bell'} - ${raw.company || ''} ${raw.role || ''}`,
+    title: `Resume - ${raw.name || 'Candidate'} - ${raw.company || ''} ${raw.role || ''}`,
     styles: {
       default: {
         document: {
@@ -267,5 +287,18 @@ if (!input) {
   console.error('Usage: node scripts/render-docx.js <resume-data.json>');
   process.exit(1);
 }
+
+// Resume-quality gate (non-fatal): warn if the resume falls below the bar
+// (metric density per bullet, anchored whyCompany). The evaluate flow should
+// fix these before render; this never blocks the render.
+try {
+  const { auditResume } = require('../lib/tailor');
+  const audit = auditResume(JSON.parse(fs.readFileSync(path.resolve(input), 'utf8')));
+  if (!audit.ok) {
+    console.warn(`\n[resume-audit] ${audit.issues.length} quality issue(s) (metric density ${audit.metricDensity}/bullet):`);
+    audit.issues.forEach((i) => console.warn('  - ' + i));
+    console.warn('');
+  }
+} catch (_) { /* audit is advisory; never block render */ }
 
 generate(path.resolve(input));

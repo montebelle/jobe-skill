@@ -116,6 +116,12 @@ If the bullet library lacks evidence for a JD-specific archetype need, ADD a new
 
 **Before rendering, verify JD-vocabulary coverage:** the role's top keywords (from the brief) should appear across the summary + bullets. If they do not, the resume is not tailored — reframe again.
 
+**Resume-quality gate (run before rendering):** check the resume JSON against the non-fatal quality gate and fix any issue it flags, then re-run until it passes:
+```bash
+node -e "const {auditResume}=require('./lib/tailor'); const a=auditResume(require('./{REPORT_DIR}/resume-{date}-{slug}.json')); console.log(JSON.stringify(a,null,2)); process.exit(a.ok?0:1)"
+```
+It checks two field-agnostic signals: (a) metric density at least 1.5 concrete numbers/parameters per bullet across summary + bullets, and (b) a `whyCompany` that is present, 120+ chars, not a placeholder, and anchored to something concrete about the company (a product, regulation, metric, or technology). Add real numbers and a specific anchor until `ok` is true. The gate never blocks the render — it is a prompt to raise quality before you ship.
+
 **Then apply the rest of the Block E rules:**
 
 **CRITICAL RULES**:

@@ -204,7 +204,7 @@ seed to cover every company that has posted an ML role we surfaced.
 
 ## Negative List
 
-`data/companies/negative-list.json` contains slugs John does not want to see.
+`data/companies/negative-list.json` contains slugs the user does not want to see.
 The pipeline filters them out before presenting results.
 
 ## Failure Modes

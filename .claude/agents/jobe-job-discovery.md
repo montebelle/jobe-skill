@@ -74,19 +74,39 @@ Score each posting 1-5 based on:
 
 ## Output Format
 
-Return results as a structured list, highest score first:
+You MUST produce TWO outputs:
 
+### 1. Structured JSON file (REQUIRED — consumed by `lib/agent-import.js`)
+
+Write the full result list to `signals/discovered/{TODAY}/agent-discovered.json` using the Write tool. `{TODAY}` is today's date in `YYYY-MM-DD` format (use Bash `date +%Y-%m-%d`). Schema:
+
+```json
+{
+  "generatedAt": "2026-04-30T19:45:00Z",
+  "queriesRun": 24,
+  "postings": [
+    {
+      "url": "https://boards.greenhouse.io/acmecorp/jobs/12345",
+      "company": "Acme Corp",
+      "title": "Senior Machine Learning Engineer",
+      "location": "Remote (US)",
+      "postedDate": "2026-04-25",
+      "jdSnippet": "First 500-1000 chars of the description as visible in search results",
+      "query": "site:boards.greenhouse.io \"Senior ML Engineer\" remote",
+      "score": 5,
+      "fit": "One sentence on the match against the candidate's profile"
+    }
+  ]
+}
 ```
-## Job Discovery Results
 
-### [Score: 5] Senior ML Engineer — Anthropic
-**URL**: https://boards.greenhouse.io/anthropic/jobs/12345
-**Location**: San Francisco (Hybrid)
-**Key Requirements**: Python, PyTorch, RLHF, agent systems, safety
-**Fit**: Strong match — the candidate's agent orchestration system (28-cron, multi-model) and output gate safety work directly align. On-device LLM optimization (KV cache, speculative decoding) matches their inference focus.
+Critical:
+- Include EVERY posting you found, even ones you scored low — the importer will re-filter.
+- `postedDate` should be ISO-8601 if extractable; otherwise null.
+- The pipeline downstream extracts ATS slugs from `url`, so URL must be the canonical ATS posting URL (not a LinkedIn redirect, not a Google search result wrapper).
 
-### [Score: 4] Staff ML Engineer — Stripe
-...
-```
+### 2. Human-readable summary (return to caller)
 
-Return at least 10 postings, up to 20 if available. Prioritize quality over quantity — only include postings with actual URLs to real job listings.
+Also return a short markdown list of the top 10 results with title / company / score / URL — this is what the orchestrator shows to the user. Skip the verbose per-posting blocks; the JSON file has the detail.
+
+Return at least 15 postings, up to 30 if available. Prioritize coverage of distinct **companies** (one good posting per company is more valuable than three at the same company) since each new company unlocks an ATS slug for future direct-API runs.

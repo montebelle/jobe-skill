@@ -1,5 +1,7 @@
 {
   "$schema": "Companies the user does not want to see in discovery results. companySlugs must be lowercase, hyphenated, matching Posting.companySlug.",
-  "companySlugs": [],
-  "reasons": {}
+  "companySlugs": ["jobgether"],
+  "reasons": {
+    "jobgether": "Remote-job aggregator that re-lists other employers' postings; the 'company' is the aggregator, not the real hiring company, so these are not directly applicable."
+  }
 }

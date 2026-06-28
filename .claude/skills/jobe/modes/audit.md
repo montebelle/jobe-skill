@@ -8,7 +8,7 @@ Brookings 2024, PMC 11937954: LLM resume screeners show measurable gender + raci
 
 ## Procedure
 
-1. Pick a target resume (usually John's most-recent deep-tailored resume).
+1. Pick a target resume (usually the candidate's most-recent deep-tailored resume).
 2. Pick a scoring function. This can be:
    - An internal rank.js fullScore
    - An external LLM (gpt-4 / sonnet / etc.) prompted to rate 0-100 against a JD

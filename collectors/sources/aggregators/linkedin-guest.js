@@ -9,7 +9,7 @@
  * Params: f_WT=2 (remote work type), f_TPR=r<seconds> (posted within),
  * start (pagination, 25/page). Returns an HTML fragment of <li> job cards
  * parsed here with regex — no headless browser, no authenticated session,
- * no Camoufox. Design decision: John's logged-in accounts are never
+ * no Camoufox. Design decision: the user's logged-in accounts are never
  * automated unattended; this endpoint is what any logged-out visitor sees.
  *
  * Fragility note: unofficial endpoint. May 429 under load or change markup.

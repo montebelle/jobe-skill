@@ -55,7 +55,7 @@ function generate(inputPath) {
       spacing: { after: 40 },
       children: [
         new TextRun({
-          text: (data.name || 'John T. Bell').toUpperCase(),
+          text: (data.name || 'Your Name').toUpperCase(),
           font: FONT, size: 44, bold: true, color: NAVY, characterSpacing: 60
         })
       ]
@@ -102,7 +102,7 @@ function generate(inputPath) {
     new Paragraph({
       children: [
         new TextRun({
-          text: data.name || 'John T. Bell',
+          text: data.name || 'Your Name',
           font: FONT, size: 22, bold: true, color: BLACK
         })
       ]
@@ -111,7 +111,7 @@ function generate(inputPath) {
 
   const doc = new Document({
     creator: 'Jobe Positioning Intelligence',
-    title: `Cover Letter - ${data.name || 'John T. Bell'} - ${data.company || ''} ${data.role || ''}`,
+    title: `Cover Letter - ${data.name || 'Candidate'} - ${data.company || ''} ${data.role || ''}`,
     styles: {
       default: {
         document: {
