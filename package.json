@@ -9,11 +9,13 @@
     "url": "https://github.com/montebelle/jobe-skill"
   },
   "dependencies": {
+    "camoufox-js": "^0.11.1",
     "docx": "^9.6.1",
     "docxtemplater": "^3.68.4",
     "dotenv": "^16.4.0",
     "md-to-pdf": "^5.2.5",
     "pizzip": "^3.2.0",
+    "playwright-core": "^1.61.0",
     "pptxgenjs": "^4.0.1"
   },
   "scripts": {

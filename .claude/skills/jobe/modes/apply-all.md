@@ -1,71 +1,55 @@
 # Apply-All Mode
 
-Process the entire apply queue sequentially. Default: paste-ready blocks (fastest, most reliable). Opt-in: browser automation with `--chrome` flag.
+Process the entire apply queue sequentially. **Default: Camoufox stealth auto-apply** (the per-job flow in `apply.md`). Each job: auto-fill → quick glance → submit → email-confirm if needed → record, then on to the next. The user watches the stream of glances and can interrupt at any time.
 
 ## Input
-`/jobe apply-all` - paste-ready blocks (default)
-`/jobe apply-all --chrome` - browser automation via Chrome (requires `mcp__Claude_in_Chrome__*` MCP tools; see apply.md for exact tool names)
-`/jobe apply-all --top 5` - top N by score
+`/jobe apply-all` — Camoufox auto-apply over the whole queue (default)
+`/jobe apply-all --top 5` — top N unapplied by score
+`/jobe apply-all [slug]` — one role
+`/jobe apply-all --paste` — fallback: paste-ready blocks (no browser; for login-walled forms — see apply-assisted.md)
+`/jobe apply-all --headless` — unattended (no visible windows; screenshots are still the glance)
 
-## Why Paste-Ready Is Default
-Browser automation is fragile: blank screenshots on Greenhouse forms, dropdown values flipping, file uploads blocked by browser security. Paste-ready blocks let the user fill forms in their own logged-in browser where cookies, sessions, and CAPTCHA trust are already established. It is faster and more reliable.
+## Why Camoufox is the default
+Job sites detect automation (the `navigator.webdriver` / DevTools fingerprints a CDP-driven Chrome leaks) and respond with CAPTCHAs and email-confirmation walls. Camoufox patches Firefox at the C++ level so those leaks never reach JS, adds human-like cursor/timing, and uses an IP-consistent locale/timezone. It fills and submits real ATS forms (Greenhouse / Lever / Ashby) without tripping those walls, and the agent closes the email-confirmation loop via the Gmail MCP. The old `--chrome` (Claude-in-Chrome MCP) path is **deprecated** — it was the detectable thing. Paste-ready (`--paste`) remains the fallback for forms behind a login the harness should not touch.
 
 ## Process
+1. Read `data/apply-queue.json`.
+2. Filter to entries where `applied` is false and `skipped` is not true.
+3. Drop entries with no `reports/{slug}/` evaluation (they need `/jobe [url]` first — list them at the end so the user knows).
+4. Sort by `score` descending (or take `--top N`).
 
-1. Read `data/apply-queue.json`
-2. Filter to entries where `applied` is false and `skipped` is not true
-3. Sort by score descending
-
-For each entry in the queue:
+For each remaining entry, run the **full `apply.md` flow**:
 
 ### Step A: Announce
 ```
 === APPLICATION {n}/{total} ===
-Company: {company}
-Role: {role}
-Score: {score}
+Company: {company}   Role: {role}   Score: {score}
 URL: {url}
-
-Proceeding in 3 seconds... (type "skip" to skip this one)
 ```
 
-### Step B: Fill Application
+### Step B: Run the Camoufox per-job flow (apply.md Steps 1–5)
+- `node scripts/camoufox-apply.js run {slug} &` (background)
+- Wait for `phase:filled`; generate + inject answers for `state.questions[]`
+- Present the glance (screenshot + summary)
+- Submit; handle email confirmation via Gmail MCP if `needsEmailConfirm`
+- (`--paste`: instead follow apply-assisted.md for this entry)
 
-**Default (paste-ready):** Follow the apply-assisted.md workflow:
-- Run `open "{url}"` to open in the user's default browser
-- Print the paste-ready application block (contact info, resume path, cover letter text, pre-written answers)
-- Follow Content Differentiation Rules from apply-assisted.md (no cross-field repetition)
-- Wait for "yes" or "skip" or "stop"
-
-**--chrome flag:** Follow the apply.md workflow:
-- Navigate to URL in Chrome via MCP tools
-- Find and click Apply button
-- Read form fields
-- Fill contact info, upload resume DOCX, write answers
-- Show review of everything filled
-- Wait for "submit" or "skip" or "change [field]"
-
-### Step C: After Submit/Yes
-- Update `data/apply-queue.json`: set `applied: true`, `appliedDate: {today}`
-- Update `data/tracker.md`: change status from "Evaluated" to "Applied"
-- Add entry to `data/followups.md` with 7-day follow-up date
-- **Move report folder**: call `moveReportFolder(slug, 'applied')` from `lib/tracker-writer.js` to relocate `reports/{slug}/` → `reports/applied/{slug}/`. The helper rewrites the queue's `resumeDocx` + `coverLetterDocx` paths and tracker.md `reportDir` column atomically.
-- Report: "Applied to {company} - {role}. {remaining} left in queue."
-
-### Step C-skip: After Skip
-- Update `data/apply-queue.json`: set `skipped: true`, `skipReason: ...`
-- Update `data/tracker.md`: change status to "Skipped"
-- **Move report folder**: call `moveReportFolder(slug, 'skipped')` to relocate `reports/{slug}/` → `reports/skipped/{slug}/`
+### Step C: Record (apply.md Step 6)
+`moveReportFolder(slug,'applied')` + tracker `Applied` + queue `applied:true` + 7-day follow-up. Report: "Applied to {company} — {role}. {remaining} left."
 
 ### Step D: Next
-Immediately proceed to the next role in the queue. No need to re-type any commands.
+Proceed to the next entry automatically. No re-typed commands.
 
-## Controls During the Session
-- **"yes"** (paste-ready) / **"submit"** (chrome) - mark applied and move to next
-- **"skip"** - skip this role and move to next (marks as Skipped in tracker)
-- **"stop"** - stop the queue, save progress (remaining roles stay in queue)
-- **"change [field]"** - modify a specific field before submitting (chrome mode only)
-- **"show"** - re-display what was filled
+## Controls during the session
+- **"skip"** — write `{action:"skip"}` to the current job's control file, mark Skipped, move on
+- **"stop"** — halt the queue, save progress (remaining entries stay unapplied)
+- **"headful {slug}"** — re-run a job with a visible window (for a login wall / CAPTCHA the user must clear)
+- **"show"** — re-display the current glance screenshot
 
-## Resume on Restart
-If the session is interrupted, `/jobe apply-all` picks up where you left off. It reads `applied: true/false` from the queue and skips already-applied and skipped roles.
+## Resume on restart
+`/jobe apply-all` is idempotent: it re-reads `applied`/`skipped` from the queue and skips anything already processed.
+
+## Safety
+- Always show the glance before submit. Stop on any required-unfilled field, CAPTCHA, or login wall — hand to the user.
+- Never automate the user's logged-in LinkedIn session. Camoufox runs a fresh fingerprinted session.
+- One-time Gmail MCP auth is required before the email-confirmation loop can run.

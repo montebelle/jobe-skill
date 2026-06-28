@@ -27,8 +27,24 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const REPORTS_DIR = path.join(ROOT, 'reports');
 
 function loadEnrichedIndex(date) {
-  const p = path.join(ROOT, 'signals', 'discovered', date, 'ranked-enriched.json');
-  if (!fs.existsSync(p)) return [];
+  let p = path.join(ROOT, 'signals', 'discovered', date, 'ranked-enriched.json');
+  if (!fs.existsSync(p)) {
+    // Fall back to the most-recent available date (handles UTC-rollover edge
+    // when running just past midnight UTC against an enriched file written
+    // under the previous local-date directory).
+    const dir = path.join(ROOT, 'signals', 'discovered');
+    if (!fs.existsSync(dir)) return [];
+    const dates = fs.readdirSync(dir).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    for (let i = dates.length - 1; i >= 0; i--) {
+      const candidate = path.join(dir, dates[i], 'ranked-enriched.json');
+      if (fs.existsSync(candidate)) {
+        console.error(`[bulk-resume] ranked-enriched.json not found for ${date}; falling back to ${dates[i]}`);
+        p = candidate;
+        break;
+      }
+    }
+    if (!fs.existsSync(p)) return [];
+  }
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 

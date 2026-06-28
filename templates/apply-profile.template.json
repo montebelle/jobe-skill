@@ -1,0 +1,20 @@
+{
+  "_README": "Copy this file to data/apply-profile.json (gitignored) and fill in your own values. It supplies the apply harness with answers a resume does not carry: work authorization, salary target, 'how did you hear about us', and OPTIONAL EEO self-identification. Identity (name/email/phone/location/links/school/current role) is read from your report resume JSON automatically; the fields below are only fallbacks/overrides. Delete the _README and _help keys before use, or leave them — unknown keys are ignored.",
+
+  "workAuthorized": "Yes",
+  "requireSponsorship": "No",
+
+  "salaryExpectation": "",
+  "howHeard": "Company careers page",
+
+  "state": "",
+  "stateName": "",
+  "country": "United States",
+  "linkedin": "",
+  "github": "",
+  "website": "",
+
+  "_help_eeo": "EEO/demographic self-identification is OPT-IN and entirely your choice. Leave eeoSelfIdentify false to DECLINE every demographic question (the harness transmits nothing). Set it to true and fill eeoValues with YOUR OWN answers to self-identify. The harness matches each value against the form's actual rendered options; any question not listed here always declines. Recognized keys: gender, race, veteran, disability, hispanic, transgender, orientation, pronouns.",
+  "eeoSelfIdentify": false,
+  "eeoValues": {}
+}

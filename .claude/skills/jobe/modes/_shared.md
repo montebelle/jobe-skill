@@ -92,7 +92,8 @@ Evidence-weighted. Rules with empirical backing are cited; rules without rigorou
 8. **70%+ JD keyword match** (directional; ATS keyword-matching is empirically how most ATS rank, but the "2.5x callbacks" number is unsourced. Tailoring per JD is supported by Resumly industry data and Resume2Vec MDPI 2024 (+15.85% nDCG), both of moderate strength)
 9. **Bold job titles, bulleted accomplishments** (common convention; F-pattern reading is from Nielsen Norman eye-tracking, which studied web pages, not resumes)
 10. **No em-dashes, en-dashes, smart quotes, or Unicode. Plain ASCII only.** (operational: ATS parsers have documented failures on Unicode; defensive)
-11. **XYZ formula: "Accomplished X as measured by Y by doing Z"** (Google-origin teaching framework, no RCT validation, but aligns with quantification as a prior)
+11. **No ATS-illegal ASCII characters: `< > [ ] { } " \`** (operational: Workday / Greenhouse / Lever / Ashby upload validators reject these as XML / markup control tokens inside the DOCX XML. `lib/normalize.js` strips them at render and both `scripts/render-docx.js` and `scripts/render-cover-letter.js` call `normalize()` on every field as a safety net — but write your `data/bullet-library.json` / `data/resume-baseline.json` (if you maintain them) clean too: use "at least 3" not the `>=` symbol, "(64, 8)" not square brackets.)
+12. **XYZ formula: "Accomplished X as measured by Y by doing Z"** (Google-origin teaching framework, no RCT validation, but aligns with quantification as a prior)
 
 ### What the empirical literature DOES strongly support (use these as priorities)
 
@@ -245,8 +246,8 @@ If you have a side-consultancy / parallel project that overlaps with your day jo
 
 Every cover letter MUST contain at minimum:
 
-1. **One specific dollar amount or measurable business outcome**: e.g., "$2M+ quarterly savings", "33M users", "MDE 7.5% at 80% power".
-2. **One leadership / scope signal**: e.g., "led 8 reports across 5 clients", "founder of multi-client AI-automation consultancy", "lead the production ML stack across 4 divisions".
+1. **One specific dollar amount or measurable business outcome**: e.g., "$2M+ quarterly savings", "10M+ users", "a measurable error reduction".
+2. **One leadership / scope signal**: e.g., "led a team of 8", "founder of a services business", "owned the production stack across 3 business units".
 3. **One decision-grade outcome**: an outcome that materially changed how the business allocates resources, runs experiments, or makes a build/buy/scale decision.
 
 If a cover letter draft fails any of these three checks, it is incomplete. Regenerate with explicit business-impact and leadership content from the bullet library.

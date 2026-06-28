@@ -56,9 +56,9 @@ Parse `$ARGUMENTS`:
 | `contacto`, `outreach`, `linkedin` | `modes/contacto.md` | Draft LinkedIn outreach messages |
 | `deep`, `research` | `modes/deep.md` | Deep company research (6-axis) |
 | `project`, `portfolio` | `modes/project.md` | Evaluate a portfolio project |
-| `apply` | `modes/apply.md` | Fill + submit one job application via Chrome (human-in-the-loop) |
-| `apply-all` | `modes/apply-all.md` | Process entire apply queue. Default: paste-ready blocks. `--chrome` flag for browser automation. |
-| `apply-assisted` | `modes/apply-assisted.md` | Opens each URL in your browser, prints paste-ready blocks. No CAPTCHA issues. |
+| `apply` | `modes/apply.md` | Fill + submit one application via Camoufox stealth automation (default); glance before submit + email-confirm loop. `--paste` falls back to paste-ready blocks. |
+| `apply-all` | `modes/apply-all.md` | Process the apply queue via Camoufox stealth auto-apply (default); `--top N`, `--paste` fallback, `--headless`. |
+| `apply-assisted` | `modes/apply-assisted.md` | Fallback: paste-ready blocks for login-walled forms (or `--paste`). |
 | `linkedin-tab`, `tab`, `linkedin-jobs`, `ingest` | `modes/linkedin-tab.md` | Read your OPEN LinkedIn Jobs tab (Chrome extension, read-only) and ingest postings into the pipeline |
 | `calibrate` | `modes/calibrate.md` | Human-label a sample of LLM-judge outputs; compute Cohen's kappa |
 | `audit` | `modes/audit.md` | Run bias audit: perturb name/school/intl, measure score variance |

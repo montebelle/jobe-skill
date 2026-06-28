@@ -1,6 +1,6 @@
 # Onboard Mode
 
-A guided interview that produces every personal file Jobe needs to run: `_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, and (optionally) `.env`. The user does not have to know the schema. You ask questions, collect answers, and write the files for them.
+A guided interview that produces every personal file Jobe needs to run: `_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, `data/apply-profile.json`, and (optionally) `.env`. The user does not have to know the schema. You ask questions, collect answers, and write the files for them.
 
 Total time target: 15–30 minutes for a thorough setup. Less if the user pastes an existing resume up front.
 
@@ -197,6 +197,22 @@ Write `data/queries/seeds.json` as `{ "$schema": "...", "queries": [ { "query", 
 
 ---
 
+## Step 6.7: Apply profile (writes `data/apply-profile.json`)
+
+The auto-apply harness (`/jobe apply`) reads answers a resume does not carry from `data/apply-profile.json`. Build it from what you already collected, using `templates/apply-profile.template.json` as the shape:
+
+- `workAuthorized` / `requireSponsorship` — derive from the Step 1.12 work-authorization answer ("US citizen" / "permanent resident" -> `workAuthorized: "Yes"`, `requireSponsorship: "No"`; "requires sponsorship" -> `workAuthorized: "Yes"`, `requireSponsorship: "Yes"`; adjust honestly to what the user said).
+- `salaryExpectation` — from the Step 1.13 salary answer (optional; leave blank to let the agent confirm per application).
+- `howHeard` — default `"Company careers page"`.
+
+**EEO / demographic self-identification is OPT-IN and entirely the user's own choice.** Ask once, plainly: "Applications often include optional EEO questions (gender, race, veteran status, disability). Want the harness to auto-fill your own answers to those, or decline them all?"
+- If they decline (the default): leave `eeoSelfIdentify: false` and `eeoValues: {}`. The harness then declines every demographic question.
+- If they want to self-identify: set `eeoSelfIdentify: true` and fill `eeoValues` with THEIR stated answers (recognized keys: `gender`, `race`, `veteran`, `disability`, `hispanic`, `transgender`). Never put a value here the user did not give you.
+
+This file is gitignored — it never leaves the user's machine.
+
+---
+
 ## Step 7: Smoke test
 
 Run a small discovery + evaluate cycle so the user sees something real:
@@ -224,10 +240,12 @@ Files written:
   .env                                           ({Step 5 — keys: brave/serpapi/github})
   data/companies/negative-list.json              ({Step 6})
   data/queries/seeds.json                        ({Step 6.5 — Q (role x location) pairs in your field})
+  data/apply-profile.json                        ({Step 6.7 — work auth, salary, EEO opt-in})
 
 Next steps:
   /jobe find                # full discovery + auto-evaluate top matches
   /jobe <posting-url>       # evaluate a specific posting
+  /jobe apply-all           # auto-apply your queue (first run fetches the Camoufox browser, ~311MB one-time)
   /jobe tracker             # see the funnel after a few applications
 
 To re-run any step:

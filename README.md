@@ -10,7 +10,7 @@
 /jobe find                 # discover, dedup, rank, ghost-score; auto-evaluate top matches
 /jobe <posting-url>        # one-shot evaluation: A-G analysis + resume + cover letter
 /jobe batch url1 url2 ...  # evaluate many postings; per-JD bullet selection per resume
-/jobe apply-all            # paste-ready blocks (or --chrome for browser automation)
+/jobe apply-all            # auto-apply the queue via Camoufox stealth automation (--paste for paste-ready fallback)
 /jobe tracker              # discovered -> evaluated -> applied -> responded -> offer
 /jobe interview-prep <co>  # STAR+R story mapping + likely questions
 ```
@@ -37,7 +37,7 @@ Jobe runs four loops over your job search:
 
 - **Discover.** Scans 12 job sources in parallel (ATS APIs + web search + HN) every time you run `/jobe find`. Dedupes with MinHash LSH, ranks with Reciprocal Rank Fusion, scores ghost-job risk with a multi-signal model, filters to remote-US (or whatever your `_profile.md` says).
 - **Evaluate.** For each posting that passes a gate-pass check, Jobe writes a tailored resume and cover letter. Bullet selection is per-JD: `lib/bullet-select.js` filters your bullet library by the posting's archetype, scores each remaining bullet against the JD's keywords, and picks the top N per role. No two resumes share identical body text.
-- **Apply.** Either prints paste-ready blocks for each application form (the default, fastest, no CAPTCHA risk), or drives Chrome via the `Claude in Chrome` extension. Always human-in-the-loop: it fills, shows what was filled, waits for your "submit" approval.
+- **Apply.** Auto-fills and submits real ATS forms (Greenhouse / Lever / Ashby) via **Camoufox** — a stealth Firefox that does not leak the automation fingerprints a CDP-driven Chrome does, so it avoids the CAPTCHA / email-confirm walls. Each application: auto-fill, a quick glance (screenshot + field summary) for your review, submit, then close the email-confirmation loop. Free-text questions are written from your own evidence, never invented. `--paste` falls back to paste-ready blocks for login-walled forms. EEO/demographic questions decline by default (opt in via `data/apply-profile.json`).
 - **Track.** A simple markdown tracker plus an apply queue, with conversion rates, follow-up cadences, and orphan detection.
 
 Jobe is **not** an auto-apply spambot and not a generic ChatGPT resume rewriter. Every claim it puts on a resume traces to a specific entry in your portfolio reference file. Every score traces to a documented method with a citation.
@@ -76,7 +76,14 @@ npm install
 mkdir -p ~/.claude/skills/jobe ~/.claude/agents
 cp -r .claude/skills/jobe/* ~/.claude/skills/jobe/
 cp .claude/agents/jobe-*.md ~/.claude/agents/
+
+# 3. (Optional, for auto-apply) fetch the Camoufox stealth browser, one-time ~311MB
+npx camoufox-js fetch
 ```
+
+> Prefer a global install? Run `./install-local.sh` from the clone instead of steps 2–3 — it copies the
+> skill into `~/.claude/` and the code into `~/.jobe/`, runs `npm install`, and fetches Camoufox for you,
+> so `/jobe` works from any directory.
 
 ### Onboard (15-30 minutes, guided)
 
@@ -167,14 +174,14 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 
 | Command | What it does |
 |---|---|
-| `/jobe onboard` | **Run this first.** Guided 7-step interview that produces every personal file Jobe needs (`_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, `.env`). 15-30 min. Re-runnable per-section. |
+| `/jobe onboard` | **Run this first.** Guided interview that produces every personal file Jobe needs (`_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, `data/apply-profile.json`, `.env`). 15-30 min. Re-runnable per-section. |
 | `/jobe find [filter]` | Phase 0-3 discovery; auto-evaluate matches above the strong threshold. Optional free-form filter (role / location / company). |
 | `/jobe <url>` | Evaluate one posting. Runs A-G blocks: role summary, portfolio match, positioning, comp, resume + cover letter, story mapping, legitimacy. |
 | `/jobe <company> <role>` | Same, finds the canonical posting URL first via WebSearch. |
 | `/jobe batch url1 url2 ...` | Evaluate many postings; cross-posting bullet differentiation enforced. |
-| `/jobe apply <slug>` | Fill one application via Chrome (human-in-the-loop). |
-| `/jobe apply-all` | Process the entire apply queue. Default: paste-ready blocks. `--chrome` for browser automation. |
-| `/jobe apply-assisted` | Alias for the paste-ready mode. |
+| `/jobe apply <slug>` | Fill + submit one application via Camoufox stealth automation; glance before submit + email-confirm loop. `--paste` falls back to paste-ready. |
+| `/jobe apply-all` | Auto-apply the entire queue via Camoufox (default). `--top N`, `--paste` fallback, `--headless`. |
+| `/jobe apply-assisted` | Fallback: paste-ready blocks for login-walled forms. |
 | `/jobe tracker` | Pipeline view, conversion rates, orphan check. |
 | `/jobe interview-prep <co>` | STAR+R story mapping plus likely questions plus company-specific prep. |
 | `/jobe followup` | Follow-up cadence (7d / 1d / same-day) and draft messages. |

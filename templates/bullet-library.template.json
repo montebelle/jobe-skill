@@ -13,31 +13,31 @@
       "id": "current-platform-build",
       "archetypes": ["AI Platform", "ML Infrastructure"],
       "keywords": ["fastapi", "embedding", "retrieval", "p95 latency", "production"],
-      "text": "Built and operate the embedding + retrieval platform: FastAPI service exposing /v1/embeddings (nomic-embed-text-v1.5, L2-normalized server-side), hybrid retrieval (vector + BM25 with MMR re-ranking), 20K-entry vector store at sub-200ms p95, serving 9 production applications."
+      "text": "EXAMPLE (replace with your own) Built and operate a core internal service used across the org: a REST API handling 50 requests per second at sub-200ms p95, with automated tests and monitoring, adopted by 8 downstream teams."
     },
     {
       "id": "current-causal-survival",
       "archetypes": ["Causal", "Applied ML"],
-      "keywords": ["survival", "hazard ratio", "propensity", "doubly robust", "AIPW"],
-      "text": "Shipped a 5M-user discrete-time complementary log-log survival model with cross-fitted propensity scores, IPW, propensity matching (0.1 caliper), Doubly Robust AIPW, and Rosenbaum sensitivity bounds, producing actionable findings reshaping marketing-spend allocation."
+      "keywords": ["analysis", "measurement", "experiment", "evaluation", "impact"],
+      "text": "EXAMPLE (replace with your own) Designed and ran a controlled measurement study comparing two approaches across a 10,000-record dataset, quantifying a 12% improvement and producing recommendations that changed how the team allocates resources."
     },
     {
       "id": "current-agent-orchestration",
       "archetypes": ["Agentic", "AI Platform"],
-      "keywords": ["agent", "orchestration", "multi-agent", "workflow", "pipeline"],
-      "text": "Architected a 4-stage deterministic agent pipeline (chosen over LLM router per Cemri MAST 2503.13657 / Agentless 2407.01489) threading a typed blackboard across 5 specialized skills, collapsing a previously week-long manual process into one same-day automated brief at 8-15 min wall-clock."
+      "keywords": ["automation", "orchestration", "workflow", "pipeline", "process"],
+      "text": "EXAMPLE (replace with your own) Architected a multi-stage automated workflow that replaced a previously week-long manual process, cutting turnaround time by roughly 80% while improving consistency across 3 teams."
     },
     {
       "id": "current-safety-layer",
       "archetypes": ["Agentic", "AI Platform"],
-      "keywords": ["safety", "prompt injection", "guardrail", "PII", "output gate"],
-      "text": "Engineered a 4-hook output safety layer (prompt injection, tool allowlist, two-pass deterministic regex + LLM review over PII / E.164 / email / UUID / credential patterns, risk-scored cancellation): cheap regex catches 85% of violations at zero marginal cost, LLM review reserved for edge cases."
+      "keywords": ["quality", "validation", "reliability", "checks", "review"],
+      "text": "EXAMPLE (replace with your own) Engineered a layered quality and validation system combining cheap automated checks with selective human review: the automated layer caught roughly 85% of issues at near-zero cost, reserving manual review for edge cases."
     },
     {
       "id": "current-forecast-platform",
       "archetypes": ["Applied ML", "ML Infrastructure"],
-      "keywords": ["forecast", "time-series", "panel", "SARIMAX", "ensemble"],
-      "text": "Built a multi-model forecasting orchestration platform (SARIMAX, Holt-Winters, ensemble, panel ML) across 4 business divisions, 700+ forecast paths, with adaptive tier-based config, particle-filter MCMC, and multi-level parallelism."
+      "keywords": ["forecast", "planning", "modeling", "scale", "configuration"],
+      "text": "EXAMPLE (replace with your own) Built a configurable planning and forecasting platform spanning 4 business units and 500+ scenarios, with adaptive per-segment configuration and parallel execution that reduced full-refresh time from hours to minutes."
     }
   ],
 
@@ -45,14 +45,14 @@
     {
       "id": "prior1-mmm-platform",
       "archetypes": ["Applied ML", "Causal"],
-      "keywords": ["MMM", "marketing mix", "media mix", "regression"],
-      "text": "Led a 4-channel marketing-mix model with Bayesian regularization across $X annual ad spend, producing budget-allocation recommendations adopted by 3 brand teams and shifting Y% of spend toward higher-ROAS channels."
+      "keywords": ["analysis", "optimization", "budget", "recommendation"],
+      "text": "EXAMPLE (replace with your own) Led an analysis of how resources mapped to outcomes across $X in annual spend, producing allocation recommendations adopted by 3 teams and shifting Y% of spend toward higher-return options."
     },
     {
       "id": "prior1-lookalike",
       "archetypes": ["Applied ML"],
-      "keywords": ["lookalike", "audience", "propensity"],
-      "text": "Designed a 4-classifier lookalike audience benchmark (logistic regression / XGBoost / LightGBM / FFNN) with cross-validated calibration, deployed across N campaigns and replacing ad-platform default targeting."
+      "keywords": ["benchmark", "comparison", "evaluation"],
+      "text": "EXAMPLE (replace with your own) Designed a head-to-head benchmark of 4 candidate approaches with consistent evaluation criteria, deployed the winner across N projects, and replaced the prior default that it outperformed."
     }
   ],
 
@@ -60,8 +60,8 @@
     {
       "id": "prior2-lead-scoring",
       "archetypes": ["Applied ML"],
-      "keywords": ["lead scoring", "conversion", "ranking"],
-      "text": "Rebuilt the lead-scoring pipeline: from 200 to 2,000 qualified leads / month, $1M+ incremental revenue attributed."
+      "keywords": ["pipeline", "throughput", "ranking", "revenue"],
+      "text": "EXAMPLE (replace with your own) Rebuilt a core ranking pipeline that lifted qualified throughput from 200 to 2,000 items per month, with $1M+ in incremental revenue attributed."
     }
   ],
 
@@ -69,8 +69,8 @@
     {
       "id": "prior3-portfolio",
       "archetypes": ["Applied ML"],
-      "keywords": ["risk", "portfolio", "credit"],
-      "text": "Built loan-portfolio default-risk models in Python and Excel VBA across $X portfolio."
+      "keywords": ["risk", "modeling", "analysis"],
+      "text": "EXAMPLE (replace with your own) Built risk-assessment models across a $X book of business, flagging the highest-exposure segments for review."
     }
   ],
 
@@ -78,14 +78,14 @@
     {
       "id": "proj-side-tool",
       "archetypes": ["Agentic", "AI Platform"],
-      "keywords": ["agent", "automation", "workflow"],
-      "text": "Built and operate an autonomous multi-cron platform serving a 3-client fleet at $X / month total cost, with operations / outreach / intelligence / ops-center surfaces on a shared runtime."
+      "keywords": ["automation", "scheduling", "side project"],
+      "text": "EXAMPLE (replace with your own) Built and operate a scheduled automation side project that runs unattended on a shared runtime, saving roughly 5 hours of manual work per week."
     },
     {
       "id": "proj-research",
       "archetypes": ["Applied ML", "Causal"],
       "keywords": ["research", "analysis", "open-source"],
-      "text": "Open-source reproduction of [paper / benchmark]: dataset shape, model variants, evaluation methodology."
+      "text": "EXAMPLE (replace with your own) Open-source reproduction of a published paper or benchmark: describe the dataset, the variants you compared, and your evaluation methodology."
     }
   ]
 }
