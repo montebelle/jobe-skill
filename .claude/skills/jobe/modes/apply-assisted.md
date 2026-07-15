@@ -1,11 +1,12 @@
-# Apply-Assisted Mode
+# Apply-Assisted Mode (fallback)
 
-Instead of driving a fresh Chrome profile (which triggers CAPTCHAs), this mode prepares everything for you to paste into your normal browser where you're already logged in.
+**Fallback path.** The default apply mechanism is now Camoufox stealth auto-apply (see `apply.md` / `apply-all.md`). Use this mode only when the browser harness should not touch a form — e.g. it sits behind a login the user must complete themselves, or the user explicitly passes `--paste`. It prepares everything for the user to paste into their own already-logged-in browser.
 
 ## Input
-`/jobe apply-assisted` - processes the entire apply queue
+`/jobe apply-assisted` - processes the entire apply queue (paste-ready)
 `/jobe apply-assisted [slug]` - processes one role
 `/jobe apply-assisted --top 5` - top N by score
+(Reached automatically when `/jobe apply` or `/jobe apply-all` is invoked with `--paste`.)
 
 ## For Each Role in the Queue
 
@@ -23,7 +24,7 @@ Resume: {absolute path to .docx}
 Cover Letter: {absolute path to cover-letter .docx}
 ================================================================
 
-CONTACT INFO (copy each field — values from _profile.md):
+CONTACT INFO (copy each field — values from ${WORKSPACE}/_profile.md):
   Name:     {candidate.name}
   Email:    {candidate.email}
   Phone:    {candidate.phone}
@@ -57,7 +58,7 @@ Q: How did you hear about this position?
 A: Company careers page
 
 Q: Are you willing to relocate?
-A: {based on location from JD vs _profile.md}
+A: {based on location from JD vs ${WORKSPACE}/_profile.md}
 
 ================================================================
 ```
@@ -66,8 +67,8 @@ A: {based on location from JD vs _profile.md}
 
 Ask: "Have you submitted {company} - {role}? (yes/skip/stop)"
 
-- **yes**: Mark applied in tracker + apply-queue.json, add follow-up entry, move to next
-- **skip**: Mark skipped, move to next
+- **yes**: Mark applied via `lib/tracker-writer.js` (it self-resolves the active workspace; do not directly edit `${WORKSPACE}/data/tracker.md` or `${WORKSPACE}/data/apply-queue.json`), add follow-up entry, move to next
+- **skip**: Mark skipped via `lib/tracker-writer.js` `moveReportFolder(slug, 'skipped')`, move to next
 - **stop**: Pause queue
 
 ### Step 4: Next Role
@@ -77,8 +78,8 @@ Open the next URL, print the next paste block. Repeat.
 ## Generating Free-Text Answers
 
 For each role, read:
-- The evaluation JSON (`reports/{slug}/resume-*.json`) for summary, experience bullets, skills
-- The analysis markdown (`reports/{slug}/analysis-*.md`) for match scores, gaps, talking points
+- The evaluation JSON (`${WORKSPACE}/reports/{slug}/resume-*.json`) for summary, experience bullets, skills
+- The analysis markdown (`${WORKSPACE}/reports/{slug}/analysis-*.md`) for match scores, gaps, talking points
 - The cover letter text for the achievement-first framing
 
 Use these to write concise, specific answers to common application questions. Every answer must:

@@ -60,6 +60,8 @@ mkdir -p "${JOBE_DIR}/data/queries"
 mkdir -p "${JOBE_DIR}/data/companies"
 mkdir -p "${JOBE_DIR}/signals/snapshots"
 mkdir -p "${JOBE_DIR}/signals/cache/jd"
+# Per-user workspaces (multi-user: one machine, many people, different fields)
+mkdir -p "${JOBE_DIR}/users"
 
 cp "${SCRIPT_DIR}"/collectors/*.js "${JOBE_DIR}/collectors/" 2>/dev/null || true
 cp "${SCRIPT_DIR}"/collectors/sources/_interface.md "${JOBE_DIR}/collectors/sources/_interface.md" 2>/dev/null || true
@@ -90,6 +92,9 @@ if [ ! -f "${JOBE_DIR}/data/companies/non-tech-seed.json" ]; then
 fi
 if [ ! -f "${JOBE_DIR}/data/companies/negative-list.json" ] && [ -f "${SCRIPT_DIR}/data/companies/negative-list.json" ]; then
   cp "${SCRIPT_DIR}/data/companies/negative-list.json" "${JOBE_DIR}/data/companies/negative-list.json"
+fi
+if [ ! -f "${JOBE_DIR}/data/companies/staffing-list.json" ] && [ -f "${SCRIPT_DIR}/data/companies/staffing-list.json" ]; then
+  cp "${SCRIPT_DIR}/data/companies/staffing-list.json" "${JOBE_DIR}/data/companies/staffing-list.json"
 fi
 
 # NOTE: personal user-layer files (_profile.md, reference.md, data/resume-baseline.json,
@@ -126,7 +131,7 @@ echo "Jobe career intelligence skill installed."
 echo ""
 echo "  Skill:        ${CLAUDE_DIR}/skills/jobe/"
 echo "  Data + code:  ${JOBE_DIR}/"
-echo "  Templates:    ${JOBE_DIR}/templates/ (resume-baseline, bullet-library, reference, apply-profile, _profile)"
+echo "  Templates:    ${JOBE_DIR}/templates/ (resume-baseline, bullet-library, reference, apply-profile, non-tech-seed)"
 echo "  Seeds:        ${JOBE_DIR}/data/queries/seeds.json (industry-neutral examples)"
 echo "  Non-tech:     ${JOBE_DIR}/data/companies/non-tech-seed.json (Workday + SmartRecruiters + iCIMS)"
 echo "  Reports:      ${JOBE_DIR}/reports/{applied,skipped}/"
@@ -134,7 +139,13 @@ echo ""
 echo "Next step — set up your personal files (15-30 min, one time):"
 echo "  /jobe onboard                        — guided interview: profile, resume baseline, bullets, evidence, keys"
 echo ""
-echo "Then:"
+echo "Multiple people share this machine? Each gets an isolated workspace under ${JOBE_DIR}/users/<name>/:"
+echo "  /jobe onboard <name>                 — create + set up one person's workspace (e.g. film, nonprofits, ops)"
+echo "  /jobe use <name>                     — switch the active person"
+echo "  /jobe users                          — list workspaces (* = active)"
+echo "  (or:  node ${JOBE_DIR}/scripts/user.js new|use|list|current)"
+echo ""
+echo "Then (against the active workspace):"
 echo "  /jobe find                           — discover jobs via ATS APIs + web search"
 echo "  /jobe https://url                    — generate a tailored resume + cover letter"
 echo "  /jobe apply-all                      — auto-apply the queue via Camoufox stealth automation"

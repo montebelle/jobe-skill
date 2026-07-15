@@ -26,7 +26,11 @@ const { roleStrings } = require('../../../lib/role-queries');
 
 const ID = 'linkedin-guest';
 
-const PAGES_PER_QUERY = 2;   // 2 x 25 cards per query, politeness cap
+// Depth is env-overridable: LINKEDIN_GUEST_PAGES raises the cap for a "deep
+// sweep" whose value is COMPANY DISCOVERY (growing the emergent company index
+// in data/companies/index.json), not remote listings — the logged-out endpoint
+// does not surface remote status (all cards show HQ cities even with f_WT=2).
+const PAGES_PER_QUERY = Math.max(1, parseInt(process.env.LINKEDIN_GUEST_PAGES || '2', 10));
 const DELAY_MS = 2200;
 const MAX_ROLES = 4;         // politeness cap; roles come from the user's seeds
 

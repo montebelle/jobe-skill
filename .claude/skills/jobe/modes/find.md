@@ -1,6 +1,6 @@
 # Find Mode
 
-Discover ML/AI/DS jobs via the unified pipeline.
+Discover recent, relevant jobs in the user's field via the unified pipeline.
 
 ## Architecture
 
@@ -67,7 +67,7 @@ Pipeline output (in `signals/discovered/{date}/`):
 ```bash
 node -e "
 const fs=require('fs');
-const top=JSON.parse(fs.readFileSync('signals/discovered/${TODAY}/ranked-enriched.json'));
+const top=JSON.parse(fs.readFileSync('${WORKSPACE}/signals/discovered/${TODAY}/ranked-enriched.json'));
 for (const p of top.slice(0,30)) {
   console.log([p.matchScore || p.quickScore, p.archetype, p.company, p.title, p.location].join(' | '));
   console.log('  '+p.canonicalUrl);
@@ -101,8 +101,8 @@ After the pipeline writes `discovery-summary.json`, read it and decide whether t
 
 ```bash
 TODAY=$(date +%Y-%m-%d)
-SUMMARY="signals/discovered/${TODAY}/discovery-summary.json"
-node -e "const s=require('./${SUMMARY}'); console.log(JSON.stringify({needs:s.needsAgentFallback, reason:s.fallbackReason, brave:s.perSource['brave-search']||0, dedup:s.afterDedup}))"
+SUMMARY="${WORKSPACE}/signals/discovered/${TODAY}/discovery-summary.json"
+node -e "const s=require('${SUMMARY}'); console.log(JSON.stringify({needs:s.needsAgentFallback, reason:s.fallbackReason, brave:s.perSource['brave-search']||0, dedup:s.afterDedup}))"
 ```
 
 **Auto-launch conditions** (any one is sufficient):
@@ -123,8 +123,10 @@ targetLocations: Remote (US) only — hard filter from _profile.md
 remoteOnly: true
 maxAgeDays: 30
 TODAY: {today's date YYYY-MM-DD}
-outputPath: signals/discovered/{TODAY}/agent-discovered.json
+outputPath: ${WORKSPACE}/signals/discovered/{TODAY}/agent-discovered.json
 ```
+
+Substitute the real absolute `${WORKSPACE}` value into the subagent prompt (as you do for `{TODAY}`), so the agent writes into the ACTIVE user's workspace — the same place `node lib/agent-import.js` reads it back from. A relative path would land in the install root and the import would find nothing.
 
 The agent writes `agent-discovered.json` itself (per its instructions). Do not parse markdown — read the JSON file.
 
@@ -158,7 +160,7 @@ Run the real network lookup via `lib/network.js`:
 ```bash
 node -e "
 const { referralCheck, ensureContactsFileExists } = require('./lib/network');
-const top = require('./signals/discovered/${TODAY}/ranked-enriched.json').slice(0, 10);
+const top = require('${WORKSPACE}/signals/discovered/${TODAY}/ranked-enriched.json').slice(0, 10);
 const created = ensureContactsFileExists();
 if (created) console.log('Created empty data/contacts.json — populate from LinkedIn export for this feature to surface real contacts.');
 const companies = [...new Set(top.map(p => p.company))];

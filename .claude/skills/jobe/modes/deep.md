@@ -53,4 +53,4 @@ Comprehensive company research for interview preparation.
 Launch **jobe-company-intel** agent with expanded scope. Supplement with targeted WebSearch queries per axis.
 
 ## Output
-Structured company intelligence report saved to `reports/{company-slug}/deep-research-{date}.md`.
+Structured company intelligence report saved to `${WORKSPACE}/reports/{company-slug}/deep-research-{date}.md`.

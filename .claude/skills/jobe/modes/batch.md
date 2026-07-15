@@ -23,12 +23,12 @@ After each: report company, role, match score, archetype, files generated, and w
 
 ## Bullet Selection — Hard Requirement
 
-For two postings of different archetypes (e.g., on-device-MLX vs causal/personalization), the selected bullet set per role must differ by at least one bullet. If two specs produce identical bullet sets, expand `data/bullet-library.json` with more archetype-specific entries before continuing the batch.
+For two postings of different archetypes (e.g., on-device-MLX vs causal/personalization), the selected bullet set per role must differ by at least one bullet. If two specs produce identical bullet sets, expand `${WORKSPACE}/data/bullet-library.json` with more archetype-specific entries before continuing the batch.
 
 Sanity-check between two batched postings:
 ```bash
-diff <(jq '.experience[].bullets' reports/{slug-A}/resume-*.json) \
-     <(jq '.experience[].bullets' reports/{slug-B}/resume-*.json)
+diff <(jq '.experience[].bullets' ${WORKSPACE}/reports/{slug-A}/resume-*.json) \
+     <(jq '.experience[].bullets' ${WORKSPACE}/reports/{slug-B}/resume-*.json)
 ```
 For postings of different archetypes, the diff should show >50% of bullets different. If less, the tailoring is shallow and the batch should be re-run with expanded library coverage.
 
@@ -43,9 +43,9 @@ node scripts/bulk-resume-from-list.js https://... https://...
 ```
 
 The helper:
-- looks up each URL in today's `signals/discovered/{date}/ranked-enriched.json`
+- looks up each URL in today's `${WORKSPACE}/signals/discovered/{date}/ranked-enriched.json`
 - runs `bullet-select` against the JD already in the enriched output
-- writes `reports/{slug}/resume-{date}-{slug}.json` + renders DOCX
+- writes `${WORKSPACE}/reports/{slug}/resume-{date}-{slug}.json` + renders DOCX
 - pushes a queue entry with `tailoringDepth: 'pending-cover-letter'`
 - leaves `coverLetter` empty for follow-up composition (cover letter quality bar requires LLM tailoring per posting)
 

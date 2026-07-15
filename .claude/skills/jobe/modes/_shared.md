@@ -4,6 +4,19 @@ Loaded for every mode. Contains scoring, positioning, ATS rules, and anti-fabric
 
 ---
 
+## Workspaces (multiple users on one machine)
+
+Jobe supports many people on the same computer, each targeting a different field (non-profits, film, operations, ...). Each person has an isolated **workspace**; the code and shared seeds are common.
+
+- **Resolve the active workspace at the start of every run.** `node "${JOBE_HOME}/scripts/user.js" current --path` prints the absolute workspace directory. It prints the install root when no user is configured (single-user / back-compat).
+- **All USER-layer paths resolve under that workspace directory**, never under the install root: `_profile.md`, `reference.md`, and everything under `data/` (resume-baseline, bullet-library, apply-profile, tracker.md, story-bank.md, followups.md, apply-queue.json, contacts.json, queries/seeds.json, companies/index.json, companies/negative-list.json), plus `reports/` and `signals/`.
+- **SHARED (never per-user):** the code (`lib/`, `collectors/`, `scripts/`), `configs/`, and the field-neutral seeds `data/companies/non-tech-seed.json` + `data/companies/staffing-list.json`. These stay at the install root.
+- The collectors and scripts resolve the active workspace on their own (from the `users/.active` pointer, or the `JOBE_USER` env var which wins), so you never pass a workspace path into `node collectors/...` or `node scripts/...`.
+- **Isolation is hard:** never read or write one person's workspace while acting as another. If you are unsure who is active, run `node "${JOBE_HOME}/scripts/user.js" current` and confirm before touching personal files.
+- **Override legacy path idioms.** Any concrete path a mode names for a USER file — `reports/...`, `data/...`, `signals/...`, `reference.md`, `_profile.md`, whether written bare-relative or via an older `JOBE_HOME="${HOME}/.jobe"` / `JOBE_HOME="."` data-root idiom — MUST be taken as relative to `${WORKSPACE}`. Prepend `${WORKSPACE}/` and ignore the legacy data-root idiom. This applies to direct `Read`/`Write`/`Edit` and to `node -e` `require('./...')`/`readFileSync`/`writeFileSync`. Only `node collectors/...` / `node scripts/...` / `node lib/...` invocations self-resolve the workspace — run those from `${JOBE_HOME}` and do not prefix them.
+
+---
+
 ## Scoring Model
 
 ### Category Weights
@@ -241,6 +254,8 @@ Each bullet should be pre-written at the depth you want it to appear in the resu
 For every employer in your `data/resume-baseline.json` `experience[]`, the bullet library must contain only claims that trace to actual repos / artifacts under that employer. Do not let bullets from one role's repos surface under another role's section. The `companyKeyMap` is the gate — get it right and the selector will not mix attributions.
 
 If you have a side-consultancy / parallel project that overlaps with your day job, declare each separately in the experience array AND keep the bullet pools strictly disjoint. The single biggest failure mode for tailored resumes is mis-attributing side-project work to the day job.
+
+Distinguish the two shapes. A side-consultancy or venture with its own client relationships over a defined period can be its own `experience[]` entry (keep its bullet pool disjoint from the day job). But an effort that is project-shaped — a single product or service you built, not a role with an employer relationship — belongs in `selectedProjects`, alongside your other portfolio projects, NOT in `experience[]`. Listing a personal project as a job overstates employment history; keep it in the projects section and let its bullets live in the library's `selectedProjects` pool.
 
 ### Cover Letter Quality Bar
 

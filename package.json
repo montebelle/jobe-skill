@@ -23,6 +23,7 @@
     "build": "npm --prefix web run build",
     "start": "npm --prefix web run start",
     "web:install": "npm --prefix web install",
-    "find": "node collectors/pipeline.js"
+    "find": "node collectors/pipeline.js",
+    "resolve-backlog": "node scripts/resolve-index-backlog.js"
   }
 }

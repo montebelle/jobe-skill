@@ -38,6 +38,9 @@ data/apply-profile.json
 /output/
 configs/_temp-*
 
+# Per-user workspaces (personal data for every person on this machine)
+/users/
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db

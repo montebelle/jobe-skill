@@ -11,7 +11,7 @@
 const path = require('path');
 const fs = require('fs');
 const { createPosting, stripHtml } = require('../../../lib/posting');
-const { getProjectRoot } = require('../../../lib/config');
+const { getProjectRoot, getSystemRoot } = require('../../../lib/config');
 const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'greenhouse-direct';
@@ -33,7 +33,7 @@ function loadSlugs(ctx) {
 
   // Legacy portals.json seed (flat array of { ats, slug })
   try {
-    const portals = JSON.parse(fs.readFileSync(path.join(getProjectRoot(), 'configs/portals.json'), 'utf8'));
+    const portals = JSON.parse(fs.readFileSync(path.join(getSystemRoot(), 'configs/portals.json'), 'utf8'));
     const list = Array.isArray(portals) ? portals : (portals.greenhouse || []);
     for (const e of list) {
       const ats = (e && e.ats) || 'greenhouse';

@@ -41,10 +41,29 @@ function generate(inputPath) {
     process.exit(1);
   }
 
+  // Prose-register advisory (NON-fatal): nudge on validated AI-flourish words in
+  // the cover letter (Kobak et al. Science Advances 2025). Advisory only — never
+  // a gate and never an authorship verdict (detection is false-positive-prone;
+  // Liang et al. 2023). Fix the wording by hand if flagged.
+  try {
+    const { auditProse } = require('../lib/tailor');
+    const p = auditProse(data.coverLetter || '');
+    if (p.advisory.length) {
+      console.warn('[prose-advisory] cover letter:');
+      p.advisory.forEach((a) => console.warn('  - ' + a));
+    }
+  } catch { /* advisory is optional */ }
+
   const contact = data.contact || {};
   const contactLine = [contact.phone, contact.email, contact.location, contact.linkedin, contact.github].filter(Boolean).join('  |  ');
   const paragraphs = normalize(data.coverLetter).split('\n\n').filter(Boolean);
-  const dateStr = new Date(data.date || Date.now()).toLocaleDateString('en-US', {
+  // A bare YYYY-MM-DD string parses as UTC midnight, which renders as the
+  // previous day in negative-offset timezones. Anchor it to local noon.
+  const rawDate = data.date || Date.now();
+  const dateValue = typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+    ? new Date(`${rawDate}T12:00:00`)
+    : new Date(rawDate);
+  const dateStr = dateValue.toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric'
   });
 

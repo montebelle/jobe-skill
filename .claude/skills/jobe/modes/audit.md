@@ -19,7 +19,7 @@ Brookings 2024, PMC 11937954: LLM resume screeners show measurable gender + raci
 ```bash
 node -e "
 const { auditScorer } = require('./lib/bias-audit');
-const resumeJson = require('./reports/<slug>/resume-<date>-<slug>.json');
+const resumeJson = require('${WORKSPACE}/reports/<slug>/resume-<date>-<slug>.json');
 
 // Example scoreFn: plug in your actual scorer here
 const scoreFn = async (resume) => {
@@ -56,4 +56,4 @@ const scoreFn = async (resume) => {
 
 ## Output
 
-Save the report to `signals/audits/{date}-{scorer-name}.json` for longitudinal tracking.
+Save the report to `${WORKSPACE}/signals/audits/{date}-{scorer-name}.json` for longitudinal tracking.

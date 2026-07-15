@@ -29,6 +29,7 @@ const MARGIN_TB = convertInchesToTwip(0.35);
 
 function sectionHeading(text) {
   return new Paragraph({
+    keepNext: true,
     spacing: { before: 140, after: 40 },
     border: {
       bottom: { color: NAVY, space: 1, style: BorderStyle.SINGLE, size: 6 }
@@ -49,8 +50,13 @@ function buildExperience(jobs) {
     const job = jobs[i];
     if (!job.title) continue;
 
-    // Title + Dates
+    // Title + Dates. keepNext binds the title to the lines below it so a job
+    // header never orphans at the bottom of a page; pageBreakBefore honors an
+    // optional per-entry flag (unset by default — never force a break unless a
+    // caller deliberately sets it, which would leave a mid-page gap).
     paragraphs.push(new Paragraph({
+      pageBreakBefore: Boolean(job.pageBreakBefore),
+      keepNext: true,
       spacing: { before: i === 0 ? 80 : 180, after: 20 },
       tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
       children: [
@@ -64,6 +70,7 @@ function buildExperience(jobs) {
     if (job.company) {
       const line = [job.company, job.location].filter(Boolean).join('  |  ');
       paragraphs.push(new Paragraph({
+        keepNext: true,
         spacing: { after: 10 },
         children: [
           new TextRun({ text: line, font: FONT, size: 22, italics: true, color: CHARCOAL })
@@ -74,6 +81,7 @@ function buildExperience(jobs) {
     // Subtitle (only if present)
     if (job.subtitle) {
       paragraphs.push(new Paragraph({
+        keepNext: true,
         spacing: { after: 30 },
         children: [
           new TextRun({ text: job.subtitle, font: FONT, size: 19, italics: true, color: GRAY })
@@ -119,9 +127,9 @@ function buildSkills(skills) {
   return paragraphs;
 }
 
-function buildSelectedProjects(projects) {
+function buildSelectedProjects(projects, heading) {
   if (!Array.isArray(projects) || projects.length === 0) return [];
-  const paragraphs = [sectionHeading('Selected Projects')];
+  const paragraphs = [sectionHeading(heading || 'Selected Projects')];
   for (const p of projects) {
     if (!p || !p.summary) continue;
     const titleText = p.name ? normalize(p.name) + ': ' : '';
@@ -242,10 +250,13 @@ function generate(inputPath) {
         new TextRun({ text: raw.summary || '', font: FONT, size: 21, color: CHARCOAL })
       ]
     }),
+    // Selected Projects FIRST — independent/open-source work carries the
+    // strongest direct evidence of technical ability, so it leads the body
+    // (only renders if the array is present and non-empty). Optional per-resume
+    // `projectsHeading` overrides the parser-standard "Selected Projects".
+    ...buildSelectedProjects(raw.selectedProjects, raw.projectsHeading),
     // Experience
     ...buildExperience(raw.experience || []),
-    // Selected Projects (only renders if array present and non-empty)
-    ...buildSelectedProjects(raw.selectedProjects),
     // Skills
     ...buildSkills(raw.skills || {}),
     // Education
@@ -292,12 +303,21 @@ if (!input) {
 // (metric density per bullet, anchored whyCompany). The evaluate flow should
 // fix these before render; this never blocks the render.
 try {
-  const { auditResume } = require('../lib/tailor');
-  const audit = auditResume(JSON.parse(fs.readFileSync(path.resolve(input), 'utf8')));
+  const { auditResume, auditProse } = require('../lib/tailor');
+  const raw = JSON.parse(fs.readFileSync(path.resolve(input), 'utf8'));
+  const audit = auditResume(raw);
   if (!audit.ok) {
-    console.warn(`\n[resume-audit] ${audit.issues.length} quality issue(s) (metric density ${audit.metricDensity}/bullet):`);
+    console.warn(`\n[resume-audit] ${audit.issues.length} quality issue(s) (words ${audit.wordCount}, summary ${audit.summaryWordCount}, projects ${audit.projectCount}, metric density ${audit.metricDensity}/bullet):`);
     audit.issues.forEach((i) => console.warn('  - ' + i));
     console.warn('');
+  }
+  // Prose-register advisory (NON-fatal, never a gate — evidence: Kobak et al.
+  // Science Advances 2025; document-level AI detection is unreliable, so this
+  // only nudges on validated flourish words, never blocks or judges authorship).
+  const prose = auditProse(raw.summary || '');
+  if (prose.advisory.length) {
+    console.warn('[prose-advisory] summary:');
+    prose.advisory.forEach((a) => console.warn('  - ' + a));
   }
 } catch (_) { /* audit is advisory; never block render */ }
 

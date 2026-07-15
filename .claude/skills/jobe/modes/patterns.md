@@ -4,7 +4,7 @@ Analyze application history for conversion insights.
 
 ## Process
 
-Read `data/tracker.md` and compute:
+Read `${WORKSPACE}/data/tracker.md` and compute:
 
 ### 1. Conversion Funnel
 Discovered -> Evaluated -> Applied -> Responded -> Interviewing -> Offer

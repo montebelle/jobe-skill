@@ -13,18 +13,22 @@
 //        {action:"confirm", link:"https://..."}      open an email confirm link
 //
 // Usage:
-//   node scripts/camoufox-apply.js run <slug> [--url U] [--headless] [--no-submit]
-//   node scripts/camoufox-apply.js confirm <url> [--headless]   # open a link standalone
+//   node scripts/camoufox-apply.js run <slug> [--url U] [--headful] [--no-submit]   (headless is the default; --headful only to watch/clear a wall)
+//   node scripts/camoufox-apply.js confirm <url> [--headful]   # open a link standalone (headless default)
 
 const fs = require('fs');
 const path = require('path');
 const { launchCamoufox, newStealthPage } = require('../lib/apply/camoufox');
 const { buildAnswers } = require('../lib/apply/answers');
-const { detectAts, fillForm, fillQuestions, clickApplyIfPresent, submitLocator } = require('../lib/apply/filler');
+const { detectAts, fillForm, fillQuestions, clickApplyIfPresent, submitLocator, dismissConsentOverlays } = require('../lib/apply/filler');
 const { normalizeApplyUrl } = require('../lib/apply/url-normalize');
 const { parseLocation, classifyRemote, classifyUs } = require('../lib/posting');
 
-const REPO = path.resolve(__dirname, '..');
+const { getUserRoot } = require('../lib/config');
+// Apply artifacts (state, control, screenshots, queue, warm profiles) live in
+// the ACTIVE user's workspace. The requires above load SHARED code from the
+// install via relative paths, so they are unaffected by the workspace root.
+const WS = getUserRoot();
 
 // playwright-core (newer than the Camoufox Juggler build) crashes while parsing
 // a page-level JS error event whose shape it does not expect — it reads
@@ -48,16 +52,18 @@ function args() {
   const flags = {};
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--url') flags.url = a[++i];
-    else if (a[i] === '--headless') flags.headless = true;
+    else if (a[i] === '--headful') flags.headful = true; // headless is the default (cleaner under Camoufox); --headful only to watch / clear a wall
     else if (a[i] === '--no-submit') flags.noSubmit = true;
     else if (a[i] === '--allow-onsite') flags.allowOnsite = true;
+    else if (a[i] === '--warm') flags.warm = true;       // force reCAPTCHA-v3 warm mode (default on for Ashby)
+    else if (a[i] === '--no-warm') flags.noWarm = true;  // disable it even for Ashby
     else if (a[i] === '--salary') flags.salary = a[++i];
   }
   return { cmd, positional, flags };
 }
 
 function ctrlDir(slug) {
-  const d = path.join(REPO, 'signals', 'apply', slug);
+  const d = path.join(WS, 'signals', 'apply', slug);
   fs.mkdirSync(d, { recursive: true });
   return d;
 }
@@ -83,7 +89,7 @@ async function waitForControl(slug, { timeoutMs = 5 * 60 * 1000 } = {}) {
 
 function urlForSlug(slug) {
   try {
-    const q = JSON.parse(fs.readFileSync(path.join(REPO, 'data', 'apply-queue.json'), 'utf8'));
+    const q = JSON.parse(fs.readFileSync(path.join(WS, 'data', 'apply-queue.json'), 'utf8'));
     const e = q.find((x) => x.slug === slug);
     return e ? e.primaryUrl : null;
   } catch { return null; }
@@ -160,6 +166,7 @@ async function fillSecurityCode(page, code) {
 
 // Robust submit-button click shared by the submit and security-code paths.
 async function clickSubmit(page) {
+  await dismissConsentOverlays(page).catch(() => {});
   const btn = submitLocator(page);
   if (!(await btn.count())) return false;
   await btn.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
@@ -171,7 +178,12 @@ async function clickSubmit(page) {
 async function run() {
   const { positional, flags } = args();
   const slug = positional[0];
-  if (!slug) { console.error('usage: run <slug> [--url U] [--headless] [--no-submit]'); process.exit(2); }
+  if (!slug) { console.error('usage: run <slug> [--url U] [--headful] [--no-submit]   (headless is the default; --headful only to watch/clear a wall)'); process.exit(2); }
+
+  // Consume-on-read makes a STALE control.json from a previous session lethal:
+  // a leftover {"action":"submit"} would fire before the agent sends anything.
+  // Always start a run with a clean control channel.
+  try { fs.unlinkSync(path.join(ctrlDir(slug), 'control.json')); console.log('[cfx] cleared stale control.json'); } catch { /* none */ }
 
   const { answers, meta } = buildAnswers(slug);
   if (flags.salary) answers.salaryExpectation = flags.salary; // batch: top-of-range per posting
@@ -191,18 +203,62 @@ async function run() {
   const url = norm.url;
   const ats = norm.ats !== 'unknown' ? norm.ats : detectAts(url);
 
-  console.log(`[cfx] slug=${slug} ats=${ats} headless=${!!flags.headless}`);
+  // WARM mode (Ashby): Ashby boards run invisible reCAPTCHA v3, which grades
+  // session warmth + human behavior — the fresh-fingerprint default scores cold
+  // and gets "possible spam". So for Ashby: (1) a PERSISTENT profile that
+  // accumulates Google/reCAPTCHA cookies across runs, (2) a Google warm-up visit
+  // that seeds those cookies in-session, (3) slower human-cadence typing, (4) a
+  // pre-submit dwell. The persistent profile is shared, so it MUST run one job
+  // at a time — a lock enforces it. Override detection with --warm / --no-warm.
+  const warm = flags.warm || (ats === 'ashby' && !flags.noWarm);
+  const profileDir = warm ? path.join(WS, 'signals', 'apply', '_profiles', ats) : null;
+  const lockDir = profileDir ? profileDir + '.lock' : null;
+  if (warm) {
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true }); // ensure signals/apply/_profiles/ exists before the atomic lock mkdir
+    try { fs.mkdirSync(lockDir); } // atomic: fails if another run holds the shared profile
+    catch {
+      const age = (() => { try { return Date.now() - fs.statSync(lockDir).mtimeMs; } catch { return 1e9; } })();
+      if (age < 15 * 60 * 1000) {
+        writeState(slug, { phase: 'needs-manual', slug, url, reason: `Ashby warmed profile busy (another apply is running). Ashby must run one at a time — retry when it frees.`, ts: Date.now() });
+        console.log('[cfx] Ashby profile locked by another run — one-at-a-time only. Bailing.');
+        return;
+      }
+      fs.rmSync(lockDir, { recursive: true, force: true }); fs.mkdirSync(lockDir); // stale lock: reclaim
+    }
+    fs.mkdirSync(profileDir, { recursive: true });
+  }
+  const releaseLock = () => { if (lockDir) { try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* ok */ } } };
+
+  console.log(`[cfx] slug=${slug} ats=${ats} headless=${!flags.headful}${warm ? ' warm=true (persistent profile + reCAPTCHA-v3 mitigations)' : ''}`);
+  if (flags.headful) console.warn('[cfx] WARNING: headful (visible browser) can TRIGGER Camoufox security/spam checks — headless runs cleaner for real submits (a real display leaks signals that conflict with the spoofed fingerprint). Use --headful only to watch or clear a wall.');
   if (norm.reason !== 'unchanged') console.log(`[cfx] url normalized (${norm.reason})`);
   console.log(`[cfx] url=${url}`);
   if (!meta.hasReport) console.log('[cfx] WARNING: no tailored report for this slug — filling contact fields only, no resume/cover.');
 
-  const browser = await launchCamoufox({ headless: flags.headless });
+  // Persistent profile: fall back to a fresh Browser if the persistent-context
+  // launch is incompatible with this Camoufox/playwright-core build — the
+  // warm-up visit + slow typing still apply, so we lose only cross-run cookies.
+  let browser;
+  try { browser = await launchCamoufox({ headless: !flags.headful, userDataDir: profileDir || undefined }); }
+  catch (e) { if (profileDir) { console.warn('[cfx] persistent profile launch failed, falling back to fresh:', (e.message || '').split('\n')[0]); browser = await launchCamoufox({ headless: !flags.headful }); } else throw e; }
   let page;
   try {
     ({ page } = await newStealthPage(browser));
     page.setDefaultTimeout(8000); // stale React-re-rendered locators should fail fast, not hang 30s
+    if (warm) {
+      // Warm-up: a real Google visit seeds the reCAPTCHA/Google cookies v3 reads,
+      // and scrolling generates organic telemetry before the graded form.
+      try {
+        await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(1800);
+        await page.mouse.move(400, 300).catch(() => {});
+        await page.evaluate(() => window.scrollTo(0, 250)).catch(() => {});
+        await page.waitForTimeout(1200);
+        console.log('[cfx] warm-up visit done (seeded Google/reCAPTCHA session)');
+      } catch (e) { console.warn('[cfx] warm-up visit failed (non-fatal):', (e.message || '').split('\n')[0]); }
+    }
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(warm ? 3500 : 2000);
 
     // Defense-in-depth location guard: discovery can leak a non-remote / non-US
     // role (an onsite posting slipped through once). Verify from the LIVE page
@@ -213,8 +269,12 @@ async function run() {
         const sels = ['.posting-categories', '.location', '.job__location', '[class*="location" i]', '.posting-category'];
         const parts = [];
         for (const s of sels) document.querySelectorAll(s).forEach((e) => parts.push(e.innerText));
-        return { loc: parts.join(' | ').replace(/\s+/g, ' ').trim().slice(0, 240), title: document.title || ((document.querySelector('h1,h2') || {}).innerText || '') };
-      }).catch(() => ({ loc: '', title: '' }));
+        // Also pull the JD BODY text so a residency requirement stated only in
+        // prose ("must be based in <country>") is caught — a field-only guard
+        // misses a JD-body location knockout, which can burn the application.
+        const body = (document.body && document.body.innerText || '').replace(/\s+/g, ' ');
+        return { loc: parts.join(' | ').replace(/\s+/g, ' ').trim().slice(0, 240), title: document.title || ((document.querySelector('h1,h2') || {}).innerText || ''), body: body.slice(0, 20000) };
+      }).catch(() => ({ loc: '', title: '', body: '' }));
       const pl = parseLocation(li.loc);
       const remoteV = classifyRemote(pl.remote, li.title, '');
       const usV = classifyUs(pl.us, li.title);
@@ -223,13 +283,24 @@ async function run() {
         console.log(`[cfx] BLOCKED: location "${li.loc}" -> remote=${remoteV} us=${usV}. Violates remote-only + US-only. Re-run with --allow-onsite to override.`);
         return;
       }
-      console.log(`[cfx] location ok: "${li.loc || '(none found)'}" -> remote=${remoteV} us=${usV}`);
+      // JD-body residency requirement that excludes the US. The default profile
+      // targets US-based, remote-only roles (see _profile); a role whose prose
+      // requires residency in a non-US country with no US allowance is a knockout.
+      const RESIDENCY_RE = /\b(must|required to|need to|only considering candidates?|open (only )?to candidates?|role (is|will be) based|position is based|you (must|will) (be|need to be) (based|located)|based (in|out of)|located (in|within)|reside (in|within)|residents? of|authorized to work in|eligible to work in)\b[^.]{0,80}\b(india|australia|new zealand|canada|united kingdom|\buk\b|europe|emea|apac|singapore|germany|ireland|brazil|mexico|philippines|latam|argentina)\b/i;
+      const usAllowed = /\b(united states|\bus\b|u\.s\.|usa|us[- ]based|us remote|remote[- ]?us|anywhere|globally|worldwide|any location)\b/i.test(li.body);
+      const foreignResidency = RESIDENCY_RE.exec(li.body);
+      if (foreignResidency && !usAllowed) {
+        writeState(slug, { phase: 'blocked-location', slug, url, locationText: 'JD body: ' + foreignResidency[0].slice(0, 120), remote: remoteV, us: 'jd-foreign-residency', ts: Date.now() });
+        console.log(`[cfx] BLOCKED: JD body requires foreign residency: "${foreignResidency[0].slice(0, 90)}" (no US allowance found). Not applying.`);
+        return;
+      }
+      console.log(`[cfx] location ok: "${li.loc || '(none found)'}" -> remote=${remoteV} us=${usV}${foreignResidency ? ' (JD names a foreign location but also allows US)' : ''}`);
     }
 
     const navigated = await clickApplyIfPresent(page);
     if (navigated) await page.waitForTimeout(1500);
 
-    const report = await fillForm(page, answers);
+    const report = await fillForm(page, answers, { slow: warm });
     const shot = await screenshot(page, slug, 'preview');
 
     writeState(slug, { phase: 'filled', slug, ats, url, ...report, screenshot: shot, ts: Date.now() });
@@ -305,6 +376,16 @@ async function run() {
         // scrolls then falls back to force/DOM click so a settling button does
         // not abort the submit and orphan the browser.
         if (!(await submitLocator(page).count())) { writeState(slug, { phase: 'error', error: 'no submit button found', ts: Date.now() }); console.log('[cfx] no submit button found'); return; }
+        if (warm) {
+          // Pre-submit dwell: reCAPTCHA v3 grades activity right up to
+          // grecaptcha.execute() (fired on submit). Scroll + linger so the score
+          // reflects a human reviewing the form, not an instant machine submit.
+          await page.mouse.move(500, 400).catch(() => {});
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+          await page.waitForTimeout(2600);
+          await page.evaluate(() => window.scrollBy(0, -200)).catch(() => {});
+          await page.waitForTimeout(1400);
+        }
         const clicked = await clickSubmit(page);
         if (!clicked) {
           const s = await screenshot(page, slug, 'submitted').catch(() => null);
@@ -400,6 +481,7 @@ async function run() {
     process.exitCode = 1;
   } finally {
     await browser.close().catch(() => {});
+    releaseLock(); // free the shared Ashby profile for the next one-at-a-time run
   }
 }
 
@@ -407,12 +489,12 @@ async function confirm() {
   const { positional, flags } = args();
   const link = positional[0];
   if (!link) { console.error('usage: confirm <url>'); process.exit(2); }
-  const browser = await launchCamoufox({ headless: flags.headless });
+  const browser = await launchCamoufox({ headless: !flags.headful });
   try {
     const { page } = await newStealthPage(browser);
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(3000);
-    const out = path.join(REPO, 'signals', 'apply', `confirm-${Date.now()}.png`);
+    const out = path.join(WS, 'signals', 'apply', `confirm-${Date.now()}.png`);
     await page.screenshot({ path: out, fullPage: true }).catch(() => {});
     console.log('[cfx] opened confirm link; screenshot', out);
   } finally { await browser.close().catch(() => {}); }
@@ -422,6 +504,6 @@ async function confirm() {
   const { cmd } = args();
   if (cmd === 'run') return run();
   if (cmd === 'confirm') return confirm();
-  console.error('commands: run <slug> [--url U] [--headless] [--no-submit] | confirm <url>');
+  console.error('commands: run <slug> [--url U] [--headful] [--no-submit]   (headless is the default; --headful only to watch/clear a wall) | confirm <url>');
   process.exit(2);
 })();

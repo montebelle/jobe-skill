@@ -7,8 +7,8 @@ Prepare for interviews using the story bank + JD analysis.
 
 ## Process
 
-1. **Find the evaluation**: Look in `reports/{slug}/` for the companion analysis and JSON
-2. **Load story bank**: Read `data/story-bank.md`
+1. **Find the evaluation**: Look in `${WORKSPACE}/reports/{slug}/` for the companion analysis and JSON
+2. **Load story bank**: Read `${WORKSPACE}/data/story-bank.md`
 3. **Load JD requirements**: From the report's JSON or companion analysis
 
 4. **Generate story mapping matrix**:
@@ -28,7 +28,7 @@ Prepare for interviews using the story bank + JD analysis.
    - Red flags: questions about career transitions, gaps, education
 
 6. **For each story, tag "Best for questions about:"**
-   Append new tags to story-bank.md if discovered during prep.
+   Append new tags to `${WORKSPACE}/data/story-bank.md` if discovered during prep.
 
 7. **Company-specific prep**:
    - Values vocabulary (from company intel)
@@ -37,4 +37,4 @@ Prepare for interviews using the story bank + JD analysis.
    - Interview process (rounds, format, duration from Glassdoor)
 
 ## Output
-Interview prep document saved to the report directory.
+Interview prep document saved to the report directory (`${WORKSPACE}/reports/{slug}/`).

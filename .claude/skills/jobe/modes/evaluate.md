@@ -37,16 +37,16 @@ else JOBE_HOME=""; fi
 
 Launch up to 3 agents IN PARALLEL:
 - **jobe-jd-analyzer**: Extract full requirements taxonomy, ATS keywords, priority classification
-- **jobe-company-intel**: Research company tech stack, culture, news, team. **Cache check first**: if `reports/{company-slug}/company-intel-{date}.json` exists and is < 14 days old, reuse it instead of spawning the agent. Save fresh intel to that path when the agent finishes.
+- **jobe-company-intel**: Research company tech stack, culture, news, team. **Cache check first**: if `${WORKSPACE}/reports/{company-slug}/company-intel-{date}.json` exists and is < 14 days old, reuse it instead of spawning the agent. Save fresh intel to that path when the agent finishes.
 - **jobe-competitor**: Profile competitor pool for this role at this company tier
 
 **Partial-result handling**: run agents via Promise.allSettled semantics. If any agent fails or rejects, flag the corresponding subsection of Block C with `⚠ {agent-id} failed; block incomplete` rather than silently proceeding. Do NOT fabricate content for missing sections.
 
 Company research is handled by `jobe-company-intel` agent (above) and cached.
-See `reports/{slug}/company-intel-{date}.json`; reuse entries under 14 days old.
+See `${WORKSPACE}/reports/{slug}/company-intel-{date}.json`; reuse entries under 14 days old.
 Salary data is fetched per-URL via `lib/enrich.js` compensation extractor.
 
-Read `reference.md` for portfolio evidence. For EVERY JD requirement:
+Read `${WORKSPACE}/reference.md` for portfolio evidence. For EVERY JD requirement:
 1. Search portfolio evidence by domain keywords
 2. Classify: Exact / Strong Adjacency / Weak Adjacency / Gap
 3. Cite specific repo paths for exact matches
@@ -89,11 +89,11 @@ node scripts/tailor-brief.js --url "<canonicalUrl>"      # or: node scripts/tail
 ```
 Prints the JD archetype, ranked keywords, responsibilities + qualifications to mirror, your evidence ranked by JD fit (per role, with matched terms), honest gaps, and a generator checklist. (Programmatic: `require('./lib/tailor').tailorBrief(jdText, baseline)`.)
 
-**(b) Build the candidate pool (`lib/bullet-select.js`):** Use `buildExperience()` and `pickProjects()` to select per-JD bullets and projects from `data/bullet-library.json`. Do NOT hand-author bullets and do NOT reorder a fixed pool. The output is a CANDIDATE pool, not the final resume.
+**(b) Build the candidate pool (`lib/bullet-select.js`):** Use `buildExperience()` and `pickProjects()` to select per-JD bullets and projects from `${WORKSPACE}/data/bullet-library.json`. Do NOT hand-author bullets and do NOT reorder a fixed pool. The output is a CANDIDATE pool, not the final resume.
 
 ```js
 const { buildExperience, pickProjects } = require('./lib/bullet-select');
-const baseline = require('./data/resume-baseline.json');
+const baseline = require('${WORKSPACE}/data/resume-baseline.json');
 const spec = {
   archetype: '<from Block A archetype detection>',
   jdText: '<raw JD text from this posting>',
@@ -105,28 +105,32 @@ resume.experience = buildExperience(baseline, spec);
 resume.selectedProjects = pickProjects(spec, 2);
 ```
 
-If the bullet library lacks evidence for a JD-specific archetype need, ADD a new entry to `data/bullet-library.json` (with `id`, `archetypes[]`, `keywords[]`, `text`) before generating the resume. Never invent evidence at resume-generation time.
+If the bullet library lacks evidence for a JD-specific archetype need, ADD a new entry to `${WORKSPACE}/data/bullet-library.json` (with `id`, `archetypes[]`, `keywords[]`, `text`) before generating the resume. Never invent evidence at resume-generation time.
 
 **(c) REFRAME to the JD (REQUIRED LLM step):** Rewrite the resume so it speaks to THIS role:
 1. **Reorder** entries and bullets so each leads with the highest-relevance evidence for the JD's archetype — not the default order, and not whatever shares the most tokens.
 2. **Reframe every bullet** into the JD's vocabulary (brief keywords + responsibilities) WITHOUT inventing. Reword real evidence only; PRESERVE the specific metrics and algorithms — change the lead, framing, and terminology to match what the role asks for.
 3. **Write a role-specific summary** that mirrors the JD responsibilities and leads with the strongest matching evidence.
-4. **Pick relevant projects** (retrieval / ranking / inference / agentic per the JD), not the default two.
+4. **Pick relevant projects** (the ones whose focus matches the JD), not the default two.
 5. **Name the honest gaps** (from the brief): position the adjacency; never claim experience the evidence does not support.
+6. **Requirement mapping**: extract the JD's top requirements; EACH must map to a specific BULLET (not just a summary line or a skills token), stated in the JD's own vocabulary where honest. Translating real evidence into the JD's words is tailoring; inventing a new claim is fabrication. The most common tailoring failure is a tailored summary over an untailored body — a summary that claims fit the bullets do not carry reads as unsubstantiated.
+7. **Center of gravity**: the top role's FIRST TWO bullets plus the first line of the summary must together carry the JD's top requirements — a reader sees these first and infers fit in seconds. Do NOT open every resume with the same favorite story regardless of role; let the JD decide what leads. If the highest-relevance evidence currently sits in the cover letter or a later role, move it up into the top role's opening bullets.
+8. **Respect stated minimums**: if the JD declares a hard minimum the evidence does not meet (a required degree, a years-of-experience count, a specific named tool or certification), do NOT paper over it with keyword stuffing or an inflated summary — name the honest adjacency and move on. A role with several unmet stated minimums is a reach, not a strong match, no matter how well the resume reads.
 
 **Before rendering, verify JD-vocabulary coverage:** the role's top keywords (from the brief) should appear across the summary + bullets. If they do not, the resume is not tailored — reframe again.
 
 **Resume-quality gate (run before rendering):** check the resume JSON against the non-fatal quality gate and fix any issue it flags, then re-run until it passes:
 ```bash
-node -e "const {auditResume}=require('./lib/tailor'); const a=auditResume(require('./{REPORT_DIR}/resume-{date}-{slug}.json')); console.log(JSON.stringify(a,null,2)); process.exit(a.ok?0:1)"
+node -e "const {auditResume}=require('./lib/tailor'); const a=auditResume(require('{REPORT_DIR}/resume-{date}-{slug}.json')); console.log(JSON.stringify(a,null,2)); process.exit(a.ok?0:1)"
 ```
-It checks two field-agnostic signals: (a) metric density at least 1.5 concrete numbers/parameters per bullet across summary + bullets, and (b) a `whyCompany` that is present, 120+ chars, not a placeholder, and anchored to something concrete about the company (a product, regulation, metric, or technology). Add real numbers and a specific anchor until `ok` is true. The gate never blocks the render — it is a prompt to raise quality before you ship.
+It checks several field-agnostic signals: (a) **required sections present** (education, experience, contact — a hand-edited JSON can silently drop one and render skips it without complaint); (b) **metric density is a BAND (0.8–2.5 numbers/parameters per bullet)** — too thin reads unsubstantiated, but a number in every clause is a documented AI/fabrication tell, so prefer fewer, mechanism-attached numbers; (c) **bullet style** — result-first, ≤45 words (at most 2 deep mechanism bullets to ~65), varied openers (never >40% starting with the same word), no line-counts / localhost / arXiv-ids / "about X" hedges; (d) a **`whyCompany`** that is present, 120+ chars, not a placeholder, and anchored to something concrete about the company (a product, regulation, metric, or technology); (e) **summary length** (35–80 words), at most 4 selected projects, and no duplicate skills. Pass the raw JD text as a second argument (`auditResume(resume, jdText)`) to additionally gate **JD fit mechanically** (all from JD-extracted keywords, no hardcoded field vocab): **coverage** (the JD's top terms appear across summary + bullets + skills), **requirement→bullet mapping** (each top term is carried by a real bullet or project, not just the summary), **center of gravity** (summary line 1 + the top role's first two bullets carry at least 2 of the JD's top-4 terms), and **unbacked-skills** detection (a JD term living only in the skills block, with no bullet evidence, is flagged). Pass `{ pageMetrics }` to gate rendered page fill (at most 2 pages, page 2 substantially full). Fix each issue until `ok` is true. The gate never blocks the render — it is a prompt to raise quality before you ship.
 
 **Then apply the rest of the Block E rules:**
 
 **CRITICAL RULES**:
 - NEVER use your internal project names in generated output. Describe by function: "autonomous ML operations platform", "competitive intelligence system", "outfit recommendation platform". (The bullet library should already enforce this in its text content.)
 - Every bullet must go DEEP into what was technically built, not just name-drop. The bullet library should be pre-written to this depth; do not paraphrase it down.
+- Bullets are result-first and readable: lead with the outcome, keep most bullets concise, and vary the opening word across the resume. Go deep on mechanism where it differentiates, but do NOT put a number in every clause — over-quantification and uniform sentence openers are documented machine-generated tells. Prefer fewer, mechanism-attached numbers over a metric in every phrase.
 - Use the DEEP technical details from your portfolio evidence. Specific algorithms, parameter values, architectural decisions — use them.
 - No "Talebian", "barbell", "antifragile", "emergence", or "inversion" in any output.
 - **Attribution check before rendering**: every bullet under an `experience[i]` entry must trace to a real artifact under that employer. Side-project / consultancy work belongs in its own experience entry or in `selectedProjects`, NEVER mixed into a different employer's bullets. See `_shared.md` Bullet Selection > Attribution Rules.
@@ -157,7 +161,7 @@ Follow cover letter rules from _shared.md:
 
 ## Block F: STAR+R Story Mapping
 
-Read `data/story-bank.md`. For each JD requirement, find matching stories.
+Read `${WORKSPACE}/data/story-bank.md`. For each JD requirement, find matching stories.
 
 Output a mapping matrix:
 | JD Requirement | Best Story | Fit | Metric to Cite |
@@ -166,7 +170,7 @@ Output a mapping matrix:
 | (secondary requirement) | (supporting story) | Partial | (metric or scope) |
 
 For requirements with no Strong match, suggest talking points from portfolio evidence.
-Append any new STAR+R stories discovered during this evaluation to `data/story-bank.md`.
+Append any new STAR+R stories discovered during this evaluation to `${WORKSPACE}/data/story-bank.md`.
 
 ---
 
@@ -187,8 +191,7 @@ NEVER default to Suspicious without specific evidence.
 
 Determine output directory:
 ```bash
-JOBE_HOME="${HOME}/.jobe"; [ -d reports ] && JOBE_HOME="."
-REPORT_DIR="${JOBE_HOME}/reports/{company-slug}-{role-slug}"
+REPORT_DIR="${WORKSPACE}/reports/{company-slug}-{role-slug}"
 mkdir -p "${REPORT_DIR}"
 ```
 
@@ -200,11 +203,16 @@ Save files:
 
 Generate DOCX:
 ```bash
-JOBE_HOME="${HOME}/.jobe"; [ -f scripts/render-docx.js ] && JOBE_HOME="."
 cd "${JOBE_HOME}"
 node scripts/render-docx.js "{REPORT_DIR}/resume-{date}-{slug}.json"
 node scripts/render-cover-letter.js "{REPORT_DIR}/resume-{date}-{slug}.json"
 ```
+
+Optionally verify the rendered page fill (the render page is authoritative, not word count). Requires LibreOffice + poppler; degrades to a warning if absent:
+```bash
+node scripts/check-docx-pages.js "{REPORT_DIR}/resume-{date}-{slug}.docx" --max 2 --min-fill 0.85
+```
+Feed its `{ pages, lastPageFill }` back into `auditResume(resume, jdText, { pageMetrics })` to gate the "half-empty page 2" defect. If it flags fewer than 2 pages or a short page 2, add role-relevant, evidence-backed content and re-render.
 
 Update tracker via unified writer:
 
@@ -212,11 +220,11 @@ Update tracker via unified writer:
 node -e "
 const { appendTrackerRow, pushQueueEntry } = require('./lib/tracker-writer');
 const { saveBaseline, assessTailoring } = require('./lib/tailoring');
-const resumeJson = require('./{REPORT_DIR}/resume-{date}-{slug}.json');
+const resumeJson = require('{REPORT_DIR}/resume-{date}-{slug}.json');
 
 // First successful generation becomes the baseline against which tailoring depth is measured.
 const fs = require('fs');
-if (!fs.existsSync('data/resume-baseline.json')) saveBaseline(resumeJson);
+if (!fs.existsSync('${WORKSPACE}/data/resume-baseline.json')) saveBaseline(resumeJson);
 
 const assessment = assessTailoring(resumeJson);
 appendTrackerRow({
@@ -250,7 +258,7 @@ Tell user: resume content, file locations, match score, keyword match rate, top 
 
 After saving files, scan for orphaned reports:
 ```bash
-ls ${JOBE_HOME}/reports/ 2>/dev/null
+ls ${WORKSPACE}/reports/ 2>/dev/null
 ```
 
 Compare report slugs against tracker entries. If any reports exist that are NOT in the tracker, warn the user:

@@ -59,7 +59,7 @@ flowchart TB
 ## Execution model
 
 1. **Skill router** (`.claude/skills/jobe/SKILL.md`) dispatches on the subcommand, then loads `modes/_shared.md` + `modes/_profile.md` + the relevant `modes/{mode}.md`.
-2. **Pipeline orchestration** (`collectors/pipeline.js`) runs all plugin sources in parallel with per-source rate limiting. Sources with unmet `requires` (env vars) return `[]` and the pipeline continues without them.
+2. **Pipeline orchestration** (`collectors/pipeline.js`) runs all plugin sources in parallel with per-source rate limiting. Sources with unmet `requires` (env vars) return `[]` and the pipeline continues without them. A cross-run history filter drops any posting whose company+role `dedupKey` was already applied to or skipped in `data/apply-queue.json` (so the same job re-discovered from a different source URL never re-surfaces); `--include-applied` bypasses it.
 3. **Three-pass dedup** (`lib/dedup.js`):
    - Pass 1: canonical URL equality (merges `alternateUrls` sets).
    - Pass 2: exact `dedupKey` match = `sha1(companySlug + roleNormalized + locationPrimary)`.
@@ -68,7 +68,7 @@ flowchart TB
 5. **Ghost-job detection** (`lib/ghost-score.js`) runs over the full-ranked set and attaches `ghostScore` + confidence label to each posting.
 6. **Archetype detection** (`lib/archetypes.js`) is optional: with a user-defined `configs/archetypes.json` it classifies each posting into one of those buckets by keyword density; with none it returns `General`. The archetype biases which portfolio evidence the evaluation block emphasizes (and is a no-op under `General`, where evidence ranks by JD-keyword overlap).
 7. **Evaluation** (A–G blocks) runs per-posting. Block B spawns three parallel sub-agents defined in `.claude/agents/jobe-*.md`.
-8. **Rendering** (`scripts/render-*.js`) produces ATS-normalized DOCX + cover letter + optional PPTX positioning deck. Normalization strips em-dashes / smart quotes / non-ASCII Unicode in both renderers.
+8. **Rendering** (`scripts/render-*.js`) produces ATS-normalized DOCX + cover letter + a selectable text-based PDF + optional PPTX positioning deck. Normalization strips em-dashes / smart quotes / non-ASCII Unicode in both renderers. The resume DOCX renders Selected Projects **before** Experience and uses `keepNext` + an optional per-entry `pageBreakBefore` to avoid orphaned section/job headers, targeting a full two-page recruiter layout. Before writing, an advisory pass runs: `lib/tailor.auditResume` (required-section presence, metric-density band, AI-tell / wall-bullet checks, and a JD-vocabulary coverage check when the JD is supplied) and `auditProse` (an AI-register linter for the summary and cover letter). Both are advisory — they print `[resume-audit]` / `[prose-advisory]` warnings and never block the render. The cover-letter renderer parses `YYYY-MM-DD` dates at local noon to avoid a negative-UTC-offset off-by-one.
 9. **Persistence**. Raw source outputs, merged postings, filtered postings, ranked postings, and enriched postings are each written per-run under `signals/discovered/{date}/` so any stage can be inspected after the fact.
 
 ## Why these specific algorithms
@@ -109,7 +109,7 @@ Standard Bertrand & Mullainathan (2004) methodology: hold the resume content con
       ├─ spawn 19 sources in parallel (rate-limited)
       ├─ normalize to Posting[]
       ├─ dedup.js (URL → dedupKey → MinHash LSH)
-      ├─ filter (recency ≤30d + location + role + negative-list)
+      ├─ filter (recency ≤30d + location + role + negative-list + applied/skipped history)
       ├─ quickRank (title heuristic)
       ├─ enrich top-K (JD fetch + comp + 30d cache)
       ├─ fullRank (RRF k=60) + ghostScore + archetype
@@ -119,6 +119,15 @@ Standard Bertrand & Mullainathan (2004) methodology: hold the resume content con
       ├─ render resume.docx + cover-letter.docx
       └─ append to tracker.md
 ```
+
+## Manual ingest side-channel (LinkedIn)
+
+The automated pipeline can only reach public, logged-out inventory. Two opt-in, user-present modes reach the personalized inventory through the Chrome extension without automating the user's session:
+
+- `linkedin-tab` reads a LinkedIn Jobs tab the user already has open (read-only).
+- `linkedin-search` drives the user's already-logged-in search across their profile queries and paginates, human-paced.
+
+Both feed `collectors/ingest-manual.js`, which parses a Chrome-extension `read_page` accessibility dump (`lib/linkedin.parseSearchCards`), drops recruiter / staffing-agency slugs (`data/companies/staffing-list.json`) and negative-list companies, then normalizes → dedups → role-matches into the same `signals/discovered/{date}/` outputs the automated pipeline writes. The codifiable parts (URL build with Remote + Past-week filters, accessibility parse, staffing filter) live in `lib/linkedin.js`; the browser drive is agent-orchestrated because a headless source plugin cannot call the Chrome extension. Account-safety is hard: never unattended, headless, or scheduled; never solve a CAPTCHA.
 
 ## Extension points
 

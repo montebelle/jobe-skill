@@ -25,6 +25,7 @@ const path = require('path');
 
 const { loadEnv, getProjectRoot } = require('../lib/config');
 const { dedup } = require('../lib/dedup');
+const { dedupKey } = require('../lib/posting');
 const { buildProfile, quickScore, fullScore, fuseRanking, isRoleMatch } = require('../lib/rank');
 const { roleStrings } = require('../lib/role-queries');
 const { enrich } = require('../lib/enrich');
@@ -54,7 +55,9 @@ function mkLogger(prefix) {
 // ── Source discovery ────────────────────────────────────────
 
 function loadSources(onlyId = null) {
-  const base = path.join(ROOT, 'collectors', 'sources');
+  // Source plugins are CODE (system layer) — resolve against this file's own
+  // dir, never the active workspace (ROOT = getUserRoot()).
+  const base = path.join(__dirname, 'sources');
   const dirs = ['aggregators', 'company-specific', 'ats-directories', 'ats-direct'];
   const sources = [];
   for (const dir of dirs) {
@@ -173,9 +176,34 @@ function loadNegativeList() {
   try { return new Set(JSON.parse(fs.readFileSync(p, 'utf8')).companySlugs || []); } catch { return new Set(); }
 }
 
+// Cross-run history: dedupKey (company-slug + role-normalized) for every req
+// already APPLIED to or SKIPPED. Keying on dedupKey — not URL — is what catches
+// the same job re-discovered from a different source (LinkedIn vs Greenhouse vs
+// a job board), which the URL-only queue filter misses.
+function loadHistoryKeys() {
+  const p = path.join(ROOT, 'data', 'apply-queue.json');
+  if (!fs.existsSync(p)) return new Map();
+  let q;
+  try { q = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return new Map(); }
+  const m = new Map();
+  for (const e of q) {
+    if (!e.company || !e.role) continue;
+    // A req counts as applied/skipped once its report folder has been relocated
+    // (moveReportFolder rewrites resumeDocx to reports/applied|skipped/{slug}),
+    // or an explicit applied flag / tracker status says so.
+    const applied = e.applied === true || /reports\/applied\//.test(e.resumeDocx || '') || e.status === 'Applied';
+    const skipped = /reports\/skipped\//.test(e.resumeDocx || '') || e.status === 'Skipped';
+    if (!applied && !skipped) continue;
+    const k = dedupKey({ company: e.company, title: e.role });
+    if (!m.has(k)) m.set(k, applied ? 'applied' : 'skipped');
+  }
+  return m;
+}
+
 function applyFilters(postings, filters, profile) {
   const queueUrls = loadQueueUrls();
   const negative = loadNegativeList();
+  const historyKeys = filters.historyFilter === false ? new Map() : loadHistoryKeys();
   // Seniority-aware recency: senior/staff IC vacancies stay open longer
   // per Review of Accounting Studies 2023 (high-skill jobs have longer
   // vacancy durations). Give them +15 days of headroom.
@@ -183,7 +211,7 @@ function applyFilters(postings, filters, profile) {
   const baseDays = filters.maxAgeDays || 30;
   const seniorDays = baseDays + (filters.seniorityExtensionDays ?? 15);
   const out = [];
-  const rejected = { recency: 0, location: 0, role: 0, queue: 0, negative: 0, nonRemote: 0 };
+  const rejected = { recency: 0, location: 0, role: 0, queue: 0, history: 0, negative: 0, nonRemote: 0 };
 
   for (const p of postings) {
     // Role: match the posting title against the user's target-role tokens.
@@ -191,9 +219,12 @@ function applyFilters(postings, filters, profile) {
     if (!isRoleMatch(p.title, profile)) { rejected.role++; continue; }
     // Negative list
     if (negative.has(p.companySlug)) { rejected.negative++; continue; }
-    // Queue
+    // Queue (URL-exact: same posting already tracked)
     const urls = [p.canonicalUrl, ...p.alternateUrls];
     if (urls.some(u => queueUrls.has(u))) { rejected.queue++; continue; }
+    // History (dedupKey: this req was already applied to or skipped, possibly
+    // via a different source URL) — override with --include-applied.
+    if (p.dedupKey && historyKeys.has(p.dedupKey)) { rejected.history++; continue; }
     // Location: US-only
     if (filters.usOnly && p.us === false) { rejected.location++; continue; }
     // Location: remote-only — hard filter per _profile.md.
@@ -354,7 +385,7 @@ async function run(opts = {}) {
 
   // ── Filter ──
   const { kept, rejected } = applyFilters(deduped, filters, profile);
-  log.info(`after filter: ${kept.length} (rejected: role=${rejected.role} recency=${rejected.recency} loc=${rejected.location} non-remote=${rejected.nonRemote} queue=${rejected.queue} negative=${rejected.negative})`);
+  log.info(`after filter: ${kept.length} (rejected: role=${rejected.role} recency=${rejected.recency} loc=${rejected.location} non-remote=${rejected.nonRemote} queue=${rejected.queue} applied/skipped=${rejected.history} negative=${rejected.negative})`);
   persist(deduped, 'merged');
   persist({ filters, rejected, kept: kept.length }, 'filter-report');
 
@@ -469,6 +500,7 @@ function parseArgs() {
     else if (a === '--source') opts.onlySource = args[++i];
     else if (a === '--max-enrich') opts.maxEnrich = parseInt(args[++i], 10);
     else if (a === '--max-age') opts.filters.maxAgeDays = parseInt(args[++i], 10);
+    else if (a === '--include-applied') opts.filters.historyFilter = false;
     else if (a === '--no-us-only') opts.filters.usOnly = false;
     else if (a === '--allow-onsite') opts.filters.remoteOnly = false;
     else if (a === '--show-ghosts') opts.showGhosts = true;

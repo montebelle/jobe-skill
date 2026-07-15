@@ -16,17 +16,15 @@
 const path = require('path');
 const fs = require('fs');
 const { createPosting } = require('../../../lib/posting');
-const { getProjectRoot } = require('../../../lib/config');
+const { getProjectRoot, getSystemRoot } = require('../../../lib/config');
 const { makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'ashby-directory';
 
 function loadKnownSlugs() {
-  const root = getProjectRoot();
-
-  // From configs/portals.json (legacy seed, flat array of { ats, slug })
+  // configs/portals.json is a SHARED system seed — read from the install root.
   try {
-    const portals = JSON.parse(fs.readFileSync(path.join(root, 'configs/portals.json'), 'utf8'));
+    const portals = JSON.parse(fs.readFileSync(path.join(getSystemRoot(), 'configs/portals.json'), 'utf8'));
     const list = Array.isArray(portals) ? portals : (portals.ashby || []);
     const slugs = list
       .filter(e => (typeof e === 'string') || e.ats === 'ashby')

@@ -20,7 +20,7 @@
 1. [What Jobe does](#what-jobe-does)
 2. [Quick start](#quick-start)
 3. [How it works](#how-it-works)
-4. [All 15 commands](#all-15-commands)
+4. [All commands](#all-commands)
 5. [Configuration](#configuration)
 6. [Why Jobe (defensibility)](#why-jobe-defensibility)
 7. [Empirical backing](#empirical-backing)
@@ -35,9 +35,9 @@
 
 Jobe runs four loops over your job search:
 
-- **Discover.** Scans 12 job sources in parallel (ATS APIs + web search + HN) every time you run `/jobe find`. Dedupes with MinHash LSH, ranks with Reciprocal Rank Fusion, scores ghost-job risk with a multi-signal model, filters to remote-US (or whatever your `_profile.md` says).
-- **Evaluate.** For each posting that passes a gate-pass check, Jobe writes a tailored resume and cover letter. Bullet selection is per-JD: `lib/bullet-select.js` filters your bullet library by the posting's archetype, scores each remaining bullet against the JD's keywords, and picks the top N per role. No two resumes share identical body text.
-- **Apply.** Auto-fills and submits real ATS forms (Greenhouse / Lever / Ashby) via **Camoufox** — a stealth Firefox that does not leak the automation fingerprints a CDP-driven Chrome does, so it avoids the CAPTCHA / email-confirm walls. Each application: auto-fill, a quick glance (screenshot + field summary) for your review, submit, then close the email-confirmation loop. Free-text questions are written from your own evidence, never invented. `--paste` falls back to paste-ready blocks for login-walled forms. EEO/demographic questions decline by default (opt in via `data/apply-profile.json`).
+- **Discover.** Scans 19 job sources in parallel (ATS APIs + web search + HN) every time you run `/jobe find`. Dedupes with MinHash LSH, ranks with Reciprocal Rank Fusion, scores ghost-job risk with a multi-signal model, filters to remote-US (or whatever your `_profile.md` says).
+- **Evaluate.** For each posting that passes a gate-pass check, Jobe writes a tailored resume and cover letter. Bullet selection is per-JD: `lib/bullet-select.js` scores each bullet against the JD's requirement terms and keywords (requirement terms weighted first) and picks the top N per role, deduping near-identical bullets that share a `studyGroup`. No two resumes share identical body text. The resume renders projects-first and fills a full two-page recruiter layout; an advisory quality gate (`auditResume` / `auditProse`) flags missing required sections, over-quantified or AI-register writing, and thin JD-vocabulary coverage before render — it warns, it never blocks.
+- **Apply.** Auto-fills and submits real ATS forms (Greenhouse / Lever / Ashby) via **Camoufox** — a stealth Firefox that does not leak the automation fingerprints a CDP-driven Chrome does, so it avoids the CAPTCHA / email-confirm walls. Each application: auto-fill, a quick glance (screenshot + field summary) for your review, submit, then close the email-confirmation loop. Runs headless by default (cleaner under Camoufox — headful can actually *trigger* the checks it avoids); `--headful` only to watch a run or clear a wall. Ashby boards auto-enable a persistent-profile "warm mode" that survives their invisible reCAPTCHA-v3 spam score. It uploads your newest PDF resume as the primary submission (DOCX fallback), and rewrites Greenhouse board / `gh_jid` wrapper URLs to the fillable embed form automatically. Free-text questions are written from your own evidence, never invented. `--paste` falls back to paste-ready blocks for login-walled forms. EEO/demographic questions decline by default (opt in via `data/apply-profile.json`).
 - **Track.** A simple markdown tracker plus an apply queue, with conversion rates, follow-up cadences, and orphan detection.
 
 Jobe is **not** an auto-apply spambot and not a generic ChatGPT resume rewriter. Every claim it puts on a resume traces to a specific entry in your portfolio reference file. Every score traces to a documented method with a citation.
@@ -50,6 +50,8 @@ A Next.js dashboard ships in `web/` for visualizing the pipeline locally. Pipeli
 npm run web:install   # one-time
 npm run dev           # http://localhost:3000
 ```
+
+The dashboard resolves the active workspace once at server start (module load in `web/src/lib/paths.ts`), so after `/jobe use <name>` or changing `JOBE_USER`, restart the web server (or launch it as `JOBE_USER=<name> npm run dev`) for it to show that person's data.
 
 See [`web/README.md`](web/README.md) for the full feature tour.
 
@@ -137,6 +139,8 @@ The discovery pipeline runs in four phases:
 
 Before any role-keyword query runs, `lib/slug-harvest.js` issues 21 role-less Brave queries against each ATS domain (`site:boards.greenhouse.io after:DATE`, `site:jobs.ashbyhq.com after:DATE`, etc.) to enumerate company slugs Jobe doesn't yet know about. New slugs land in `data/companies/index.json` immediately, and the direct-ATS plugins re-read the index at discover-time, so the same run reaps them. Over weeks of use the seed list becomes vestigial — the index *becomes* the source of truth.
 
+Companies discovered by name only (from the LinkedIn-guest / SerpAPI sources, with no ATS URL) are filed as `ats: "other"` and never iterated by the direct-ATS plugins. Run `npm run resolve-backlog` (keyless, read-only; `lib/slug-resolve.js`) to probe the public Greenhouse / Lever / Ashby board APIs and promote the resolvable names to real slugs, so the next run harvests their actual reqs.
+
 ### Phase 1: Discovery
 
 `collectors/pipeline.js` fans out 19 source plugins in parallel, rate-limited per source:
@@ -158,7 +162,7 @@ Every source emits raw `Posting[]` in a canonical schema. `lib/dedup.js` then ru
 
 ### Phase 2: Filter, enrich, score
 
-Filters apply: recency window (30 days, +15 for senior / staff per *Review of Accounting Studies 2023*), location (remote / US / hybrid based on `_profile.md`), role gate (posting titles matched against your target-role tokens from `data/queries/seeds.json`; permissive when you have no seeds yet), queue, negative list.
+Filters apply: recency window (30 days, +15 for senior / staff per *Review of Accounting Studies 2023*), location (remote / US / hybrid based on `_profile.md`), role gate (posting titles matched against your target-role tokens from `data/queries/seeds.json`; permissive when you have no seeds yet), queue, negative list, and a cross-run **history filter** that drops any posting whose company+role was already applied to or skipped in `data/apply-queue.json` — keyed on company+role, not URL, so it catches the same job re-discovered from a different source (override with `--include-applied`).
 
 Every gate-passing posting (default cap 300) gets enriched: JD text fetched, compensation extracted, 30-day cached. Then `fullScore` runs on JD content (50 baseline + signal-based deltas, clamped to [0, 100]). Pre-enrich `quickScore` only sets enrichment priority (seniority + freshness + ATS-canonical-URL boost); it does not gate.
 
@@ -175,12 +179,15 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 | Command | What it does |
 |---|---|
 | `/jobe onboard` | **Run this first.** Guided interview that produces every personal file Jobe needs (`_profile.md`, `reference.md`, `data/resume-baseline.json`, `data/bullet-library.json`, `data/apply-profile.json`, `.env`). 15-30 min. Re-runnable per-section. |
+| `/jobe onboard <name>` | Create + set up an isolated workspace for one person on a shared machine (e.g. `film`, `nonprofits`, `ops`), then run the interview for it. |
+| `/jobe use <name>` | Switch the active person; every later command acts on their workspace. |
+| `/jobe users` | List the workspaces on this machine (`*` = active). |
 | `/jobe find [filter]` | Phase 0-3 discovery; auto-evaluate matches above the strong threshold. Optional free-form filter (role / location / company). |
 | `/jobe <url>` | Evaluate one posting. Runs A-G blocks: role summary, portfolio match, positioning, comp, resume + cover letter, story mapping, legitimacy. |
 | `/jobe <company> <role>` | Same, finds the canonical posting URL first via WebSearch. |
 | `/jobe batch url1 url2 ...` | Evaluate many postings; cross-posting bullet differentiation enforced. |
-| `/jobe apply <slug>` | Fill + submit one application via Camoufox stealth automation; glance before submit + email-confirm loop. `--paste` falls back to paste-ready. |
-| `/jobe apply-all` | Auto-apply the entire queue via Camoufox (default). `--top N`, `--paste` fallback, `--headless`. |
+| `/jobe apply <slug>` | Fill + submit one application via Camoufox stealth automation; headless by default, glance before submit + email-confirm loop. `--paste` falls back to paste-ready; Ashby auto-warms (`--warm`/`--no-warm`). |
+| `/jobe apply-all` | Auto-apply the entire queue via Camoufox (default; headless). `--top N`, `--paste` fallback, `--headful`, `--warm`/`--no-warm`. |
 | `/jobe apply-assisted` | Fallback: paste-ready blocks for login-walled forms. |
 | `/jobe tracker` | Pipeline view, conversion rates, orphan check. |
 | `/jobe interview-prep <co>` | STAR+R story mapping plus likely questions plus company-specific prep. |
@@ -189,19 +196,36 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full component diagram.
 | `/jobe contacto <co>` | LinkedIn outreach drafts (recruiter / HM / peer / interviewer; 300 chars). |
 | `/jobe deep <co>` | 6-axis company research (product, business, people, growth, risk, interview signals). |
 | `/jobe project <path>` | Evaluate a portfolio project for archetype fit and interview defensibility. |
+| `/jobe linkedin-tab` | Read your OPEN LinkedIn Jobs tab (Chrome extension, read-only) and ingest postings into the pipeline. |
+| `/jobe linkedin-search` | Drive your LOGGED-IN LinkedIn search across profile queries + paginate (Chrome extension), staffing-filter, ingest. Opt-in + user-present only; also reachable as `find --linkedin`. |
 | `/jobe calibrate` | Weekly LLM-judge calibration loop (Cohen's kappa tracking, threshold >= 0.75). |
 | `/jobe audit` | Demographic bias audit over the scorer (name x school perturbations). |
 
 ---
 
+## Multiple users on one machine
+
+Several people can share one Jobe install, each targeting a different field. Each person gets an isolated **workspace** under `users/<name>/` holding their own profile, evidence, resume baseline, tracker, apply queue, reports, and discovery signals. The code, configs, and field-neutral ATS seeds stay shared.
+
+```bash
+/jobe onboard film         # create + set up the "film" workspace
+/jobe onboard nonprofits   # ...and a "nonprofits" workspace
+/jobe use film             # switch; every later command acts on film's data
+/jobe users                # list workspaces (* = active)
+```
+
+Under the hood these call `node scripts/user.js <new|use|list|current|migrate>`. The active workspace is stored in `users/.active` and is overridable per-command with the `JOBE_USER` env var (`JOBE_USER=ops /jobe find`). Already using Jobe single-user? `node scripts/user.js migrate <name>` moves your existing data into a named workspace. Workspaces are gitignored and never leave your machine — and with no workspace configured, Jobe behaves exactly as a single-user install.
+
+---
+
 ## Configuration
 
-Five files drive Jobe's behavior. Two are templates, three are private to you.
+Five files drive Jobe's behavior. Two are templates, three are private to you. In a multi-user setup they live under the active workspace (`users/<name>/`); the paths below are workspace-relative.
 
 | File | Purpose | Source |
 |---|---|---|
 | `.env` | API keys (Brave, SerpAPI, GitHub) | Copy from `.env.example` |
-| `.claude/skills/jobe/modes/_profile.md` | Your name, contact, target roles, target locations | Copy from `_profile.template.md` |
+| `_profile.md` | Your name, contact, target roles, target locations | Copy from `_profile.template.md` (auto-seeded into each new workspace) |
 | `reference.md` | Portfolio evidence (project by project) | Copy from `templates/reference.template.md` |
 | `data/resume-baseline.json` | Your canonical resume structure (companies, dates) | Copy from `templates/resume-baseline.template.json` |
 | `data/bullet-library.json` | Per-role bullet pool, archetype-tagged | Copy from `templates/bullet-library.template.json` |
@@ -259,9 +283,13 @@ No, but recall is much higher with one. Without any key, Jobe runs the public-AP
 
 Two paths. (1) Run `/jobe <posting-url>` directly with the URL of the LinkedIn / Indeed / company-careers listing — Jobe will fetch, parse, and evaluate it without going through discovery. (2) The agent fallback layer (`jobe-job-discovery`) is exactly for this: it uses Claude's built-in WebSearch to targetedly find ATS URLs for companies the search APIs missed. It fires automatically when discovery recall is low.
 
+### Can Jobe pull from my LinkedIn feed?
+
+Only with you present, and only read-driven. `/jobe linkedin-search` (or `/jobe find --linkedin`) drives *your* already-logged-in LinkedIn search tab through the Chrome extension — it runs your profile queries with LinkedIn's Remote + Past-week filters, paginates human-paced, drops the recruiter / staffing-agency "Promoted" noise via `data/companies/staffing-list.json`, and ingests the rest into the same pipeline. This is strictly opt-in and user-present: Jobe never automates your logged-in session unattended, headless, or on a schedule, and never solves a CAPTCHA. (The separate `/jobe linkedin-tab` just reads a Jobs tab you already have open.)
+
 ### How does Jobe avoid hallucinating bullets?
 
-Bullets are not LLM-generated at evaluate-time. They are pre-written by you in `data/bullet-library.json`, tagged with archetypes and keywords, and *selected* (not generated) per posting by `lib/bullet-select.js`. The selector filters by archetype intersection, scores by keyword overlap against the JD, and returns the top N. The cover letter *is* LLM-composed, but it draws only from the same library — the rules in `modes/_shared.md` enforce a quality bar (specific dollar amount + leadership signal + decision-grade outcome) so the LLM has no room to invent.
+Bullets are not LLM-generated at evaluate-time. They are pre-written by you in `data/bullet-library.json`, tagged with archetypes and keywords, and *selected* (not generated) per posting by `lib/bullet-select.js`. The selector filters by archetype intersection, scores by keyword overlap against the JD, and returns the top N. The cover letter *is* LLM-composed, but it draws only from the same library — the rules in `modes/_shared.md` enforce a quality bar (specific dollar amount + leadership signal + decision-grade outcome) so the LLM has no room to invent. At render time an advisory linter (`auditProse`) flags AI-register flourish words and connector overuse in the cover letter, summary, and free-text answers; it is advisory only and never emits an authorship verdict (document-level AI detection is unreliable).
 
 ### Can I use Jobe for non-ML / non-AI roles?
 

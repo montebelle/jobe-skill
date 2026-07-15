@@ -12,7 +12,7 @@ Track and draft follow-up communications.
 
 ## Display
 
-Read `data/tracker.md` and `data/followups.md`. Compute:
+Read `${WORKSPACE}/data/tracker.md` and `${WORKSPACE}/data/followups.md`. Compute:
 - **URGENT**: Response needed within 24 hours
 - **OVERDUE**: Past due date
 - **Upcoming**: Due within 3 days
@@ -32,9 +32,9 @@ For each overdue or urgent follow-up, draft a message:
 
 ## Update
 
-After drafting, update `data/followups.md` with the new follow-up date.
+After drafting, update `${WORKSPACE}/data/followups.md` with the new follow-up date.
 
-## Data Format (data/followups.md)
+## Data Format (${WORKSPACE}/data/followups.md)
 
 ```markdown
 | # | App# | Company | Role | Last Action | Last Date | Next Due | Status |

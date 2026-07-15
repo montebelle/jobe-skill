@@ -4,6 +4,10 @@ A guided interview that produces every personal file Jobe needs to run: `_profil
 
 Total time target: 15–30 minutes for a thorough setup. Less if the user pastes an existing resume up front.
 
+## Workspace
+
+Write every file into the ACTIVE user's workspace `${WORKSPACE}` (resolved by SKILL Step 0), not the install root — so multiple people on one machine stay isolated. If `$ARGUMENTS` included a name (`/jobe onboard <name>`), SKILL Step 0 has already created and activated that workspace via `node "${JOBE_HOME}/scripts/user.js" new <name>`; confirm `node "${JOBE_HOME}/scripts/user.js" current` shows it before writing. If no workspace exists yet and this is a shared machine, ask the user for a short workspace name (e.g. their first name or their focus like `film` / `nonprofits` / `ops`) and create it the same way first. All paths below (`_profile.md`, `reference.md`, `data/...`) are relative to `${WORKSPACE}`.
+
 ## Input
 
 `$ARGUMENTS` after `onboard`:
@@ -44,7 +48,7 @@ Open by introducing what the interview produces and roughly how long it takes. T
 14. **Education** — degree, school, graduation year (one entry; multiples optional)
 15. **Skills bucket headings** — ask for 3–5 categories the user wants on their resume (default: Languages, ML, Infra, Data). Then ask for 4–10 entries per bucket.
 
-Write to `.claude/skills/jobe/modes/_profile.md` using the `_profile.template.md` shape. Confirm the path and contents back to the user before moving on.
+Write to `${WORKSPACE}/_profile.md` using the `_profile.template.md` shape (the template still lives in the shared modes dir and is fine to READ from there; never WRITE the person's profile into the shared modes dir). Confirm the path and contents back to the user before moving on.
 
 ---
 
@@ -232,15 +236,15 @@ Print a summary:
 ```
 Onboarding complete.
 
-Files written:
-  .claude/skills/jobe/modes/_profile.md         ({Step 1})
-  reference.md                                   ({Step 3 — N projects across M archetypes})
-  data/resume-baseline.json                      ({Step 2 — K roles})
-  data/bullet-library.json                       ({Step 4 — total B bullets across K role-keys})
-  .env                                           ({Step 5 — keys: brave/serpapi/github})
-  data/companies/negative-list.json              ({Step 6})
-  data/queries/seeds.json                        ({Step 6.5 — Q (role x location) pairs in your field})
-  data/apply-profile.json                        ({Step 6.7 — work auth, salary, EEO opt-in})
+Files written (all under the workspace ${WORKSPACE}):
+  ${WORKSPACE}/_profile.md                        ({Step 1})
+  ${WORKSPACE}/reference.md                       ({Step 3 — N projects across M archetypes})
+  ${WORKSPACE}/data/resume-baseline.json          ({Step 2 — K roles})
+  ${WORKSPACE}/data/bullet-library.json           ({Step 4 — total B bullets across K role-keys})
+  ${WORKSPACE}/.env                               ({Step 5 — keys: brave/serpapi/github})
+  ${WORKSPACE}/data/companies/negative-list.json  ({Step 6})
+  ${WORKSPACE}/data/queries/seeds.json            ({Step 6.5 — Q (role x location) pairs in your field})
+  ${WORKSPACE}/data/apply-profile.json            ({Step 6.7 — work auth, salary, EEO opt-in})
 
 Next steps:
   /jobe find                # full discovery + auto-evaluate top matches

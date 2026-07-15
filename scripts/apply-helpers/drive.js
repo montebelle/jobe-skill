@@ -11,15 +11,18 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const REPO = path.resolve(__dirname, '..', '..');
+const REPO = path.resolve(__dirname, '..', '..');   // shared install (code)
 const t = require(path.join(REPO, 'lib', 'tracker-writer.js'));
+const { getUserRoot, getActiveUser } = require(path.join(REPO, 'lib', 'config.js'));
+const WS = getUserRoot();   // active user workspace (apply state, queue, followups)
+const ACTIVE_USER = getActiveUser();   // pin the child to THIS workspace (below)
 
 const slug = process.argv[2];
 const answersFile = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : null;
 const noRecord = process.argv.includes('--no-record');
 if (!slug) { console.error('usage: drive.js <slug> [answersFile] [--no-record]'); process.exit(2); }
 
-const dir = path.join(REPO, 'signals', 'apply', slug);
+const dir = path.join(WS, 'signals', 'apply', slug);
 fs.mkdirSync(dir, { recursive: true });
 const statePath = path.join(dir, 'state.json');
 const ctrlPath = path.join(dir, 'control.json');
@@ -39,7 +42,11 @@ async function waitPhase(phases, timeoutMs) {
   try { fs.unlinkSync(statePath); } catch {}
   try { fs.unlinkSync(ctrlPath); } catch {}
   const log = fs.openSync(path.join(dir, 'drive-run.log'), 'w');
-  const child = spawn('node', [path.join(REPO, 'scripts', 'camoufox-apply.js'), 'run', slug], { detached: true, stdio: ['ignore', log, log] });
+  // Pin the detached child to the SAME workspace via JOBE_USER (wins over the
+  // users/.active pointer), so a mid-flight `/jobe use <other>` can't split the
+  // parent and child onto different workspaces.
+  const childEnv = ACTIVE_USER ? { ...process.env, JOBE_USER: ACTIVE_USER } : process.env;
+  const child = spawn('node', [path.join(REPO, 'scripts', 'camoufox-apply.js'), 'run', slug], { detached: true, stdio: ['ignore', log, log], env: childEnv });
   child.unref();
 
   let ph = await waitPhase(['filled', 'blocked-location', 'needs-manual', 'error', 'submit-failed', 'needs-security-code'], 300000);
@@ -84,7 +91,7 @@ async function waitPhase(phases, timeoutMs) {
   const s = readState();
   if (result === 'submitted') {
     if (!noRecord) {
-      const q = JSON.parse(fs.readFileSync(path.join(REPO, 'data', 'apply-queue.json'), 'utf8'));
+      const q = JSON.parse(fs.readFileSync(path.join(WS, 'data', 'apply-queue.json'), 'utf8'));
       const arr = Array.isArray(q) ? q : (q.queue || q.entries || []);
       const e = arr.find((x) => (x.slug || x.id) === slug) || {};
       try { t.moveReportFolder(slug, 'applied'); } catch (_) {}
@@ -93,7 +100,7 @@ async function waitPhase(phases, timeoutMs) {
         t.appendTrackerRow({ date: TODAY, company: e.company || '', role: e.role || e.title || '', score: e.score || '', status: 'Applied', reportDir: 'reports/applied/' + slug + '/', notes: 'Camoufox auto-apply; submitted ' + TODAY + '; EEO self-identified' });
       } catch (_) {}
       try {
-        fs.appendFileSync(path.join(REPO, 'data', 'followups.md'), `\n## ${e.company || ''} — ${e.role || e.title || ''}\n- Applied: ${TODAY} (Camoufox auto-apply)\n- Next follow-up: ${followUpDate} (+7 days)\n- Status: Awaiting response\n`);
+        fs.appendFileSync(path.join(WS, 'data', 'followups.md'), `\n## ${e.company || ''} — ${e.role || e.title || ''}\n- Applied: ${TODAY} (Camoufox auto-apply)\n- Next follow-up: ${followUpDate} (+7 days)\n- Status: Awaiting response\n`);
       } catch (_) {}
     }
     writeCtrl({ action: 'done' });

@@ -33,7 +33,7 @@ Draft LinkedIn outreach messages for job applications.
 
 ## Constraints
 - **300 characters max** (LinkedIn connection request limit)
-- Every message references specific JD requirements and portfolio evidence
+- Every message references specific JD requirements and portfolio evidence (portfolio evidence comes from `${WORKSPACE}/reference.md`; the per-role JD/analysis comes from `${WORKSPACE}/reports/{slug}/`)
 - NO generic templates
 - NO "I'd love to connect" without substance
 - NO copy-paste vibes

@@ -20,13 +20,13 @@
 const path = require('path');
 const fs = require('fs');
 const { createPosting } = require('../../../lib/posting');
-const { getProjectRoot } = require('../../../lib/config');
+const { getSystemRoot } = require('../../../lib/config');
 const { roleStrings, makeTitleMatcher } = require('../../../lib/role-queries');
 
 const ID = 'workday';
 
 function loadTenants() {
-  const p = path.join(getProjectRoot(), 'data/companies/non-tech-seed.json');
+  const p = path.join(getSystemRoot(), 'data/companies/non-tech-seed.json');
   if (!fs.existsSync(p)) return [];
   try {
     const data = JSON.parse(fs.readFileSync(p, 'utf8'));
