@@ -91,10 +91,18 @@ async function discover(ctx) {
         const cards = parseCards(html);
         if (!cards.length) break; // no more results for this query
         for (const c of cards) {
+          // f_WT=2 already restricted this search to remote-work-type roles, but
+          // the guest cards show the company HQ CITY (not the work location),
+          // which the strict remote gate misreads as onsite and drops. When the
+          // remote-only default is on, trust LinkedIn's own remote filter and
+          // label the work location Remote (keep the HQ city as a note) so these
+          // survive; the LinkedIn JD cannot be enriched to re-verify anyway.
+          const remoteOnly = filters.remoteOnly !== false;
           const p = createPosting({
             title: c.title,
             company: c.company,
-            location: c.location || (filters.remoteOnly !== false ? 'Remote - United States' : ''),
+            location: remoteOnly ? 'Remote - United States' : (c.location || ''),
+            hqLocation: remoteOnly ? (c.location || null) : null,
             url: c.url,
             postedDate: c.datetime || null,
             sourceUrl: `https://www.linkedin.com/jobs/search?keywords=${encodeURIComponent(q)}`,
