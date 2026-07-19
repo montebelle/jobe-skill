@@ -135,6 +135,30 @@ Jobe will then auto-evaluate the matches scoring above 80, list the 65-79 band f
 
 The discovery pipeline runs in four phases:
 
+```mermaid
+flowchart TD
+    SH["Phase 0 — slug harvest<br/>lib/slug-harvest.js<br/>role-less ATS queries find unknown companies"] --> IDX[("data/companies/index.json<br/>grows every run")]
+    IDX --> DISC
+
+    subgraph d ["Phase 1 — discovery"]
+        DISC["collectors/sources/*<br/>aggregators, ATS-direct, company boards"]
+    end
+
+    DISC --> DEDUP["lib/dedup.js + minhash.js<br/>URL exact, then dedupKey, then MinHash LSH"]
+
+    subgraph f ["Phase 2 — filter, enrich, score"]
+        DEDUP --> RANK["lib/rank.js + rrf.js<br/>Reciprocal Rank Fusion, k=60"]
+        RANK --> ENR["lib/enrich.js<br/>lazy JD fetch, 30-day cache"]
+        ENR --> GHOST["lib/ghost-score.js<br/>multi-signal ghost detection"]
+    end
+
+    GHOST --> AGENT["Phase 3 — agent fallback<br/>only for gaps the deterministic path missed"]
+    AGENT --> OUT["Ranked postings<br/>then per-JD tailoring via lib/tailor.js"]
+```
+
+Each phase is deterministic and inspectable on its own — the LLM does reasoning *inside* stages rather than routing between them. The agent step in Phase 3 is a fallback, not the primary path.
+
+
 ### Phase 0: Slug harvest
 
 Before any role-keyword query runs, `lib/slug-harvest.js` issues 21 role-less Brave queries against each ATS domain (`site:boards.greenhouse.io after:DATE`, `site:jobs.ashbyhq.com after:DATE`, etc.) to enumerate company slugs Jobe doesn't yet know about. New slugs land in `data/companies/index.json` immediately, and the direct-ATS plugins re-read the index at discover-time, so the same run reaps them. Over weeks of use the seed list becomes vestigial — the index *becomes* the source of truth.
