@@ -1,0 +1,11 @@
+{
+  "$schema": "Optional starting employers for the sources that read one company board at a time. EMPTY by default: Jobe ships no company list, because any such list reflects one field. Each key is an applicant tracking system and each value is a list of that system's board identifiers for employers you want scanned. An entry is either the identifier as a string, or an object { \"slug\": \"<identifier>\", \"name\": \"<Employer name>\" }. Use the object form for bamboohr and personio, whose feeds do not carry the employer name. The identifier is the part of the careers address that names the employer, for example the <identifier> in boards.greenhouse.io/<identifier> or <identifier>.bamboohr.com. This file is shared by every workspace and replaced on install. For your own list, create data/companies/portals.json in your workspace with the same shape; it is read first and combined with this file. Your company index (data/companies/index.json) also grows by itself from each discovery run, so employers in your field surface over time without editing anything here.",
+  "greenhouse": [],
+  "lever": [],
+  "ashby": [],
+  "workable": [],
+  "recruitee": [],
+  "breezy": [],
+  "bamboohr": [],
+  "personio": []
+}

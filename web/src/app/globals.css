@@ -1,0 +1,240 @@
+@import "tailwindcss";
+
+/*
+ * Jobe — career-intelligence dashboard.
+ *
+ * Visual direction: editorial / private-intelligence terminal. Cool steel-blue
+ * atmosphere with warm amber as the "signal / action required" accent. Dark
+ * only. Variable-weight serif (Fraunces) for display monuments, Geist Sans for
+ * UI, Geist Mono for data. Numbers are first-class citizens.
+ */
+
+@theme {
+  /* ─── Core palette ────────────────────────────────────────────── */
+  --color-background:        oklch(11% 0.025 245);
+  --color-foreground:        oklch(94% 0.005 245);
+  --color-card:              oklch(15% 0.025 245);
+  --color-card-foreground:   oklch(94% 0.005 245);
+  --color-card-elev:         oklch(17% 0.027 245);
+  --color-muted:             oklch(22% 0.025 245);
+  --color-muted-foreground:  oklch(60% 0.015 245);
+  --color-faint:             oklch(40% 0.015 245);
+  --color-border:            oklch(28% 0.030 240);
+  --color-border-hover:      oklch(40% 0.040 230);
+
+  /* ─── Steel blue (primary, atmospheric) ───────────────────────── */
+  --color-primary:             oklch(0.62 0.13 245);
+  --color-primary-foreground:  oklch(98% 0.002 245);
+  --color-primary-soft:        oklch(0.62 0.13 245 / 0.15);
+  --color-ring:                oklch(0.62 0.13 245);
+
+  /* ─── Amber (accent, action / signal / hiring) ────────────────── */
+  --color-accent:             oklch(0.78 0.14 75);
+  --color-accent-foreground:  oklch(15% 0.025 245);
+  --color-accent-soft:        oklch(0.78 0.14 75 / 0.12);
+  --color-accent-strong:      oklch(0.82 0.16 70);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --color-success:     oklch(70% 0.13 155);   /* response / interview */
+  --color-success-soft: oklch(70% 0.13 155 / 0.14);
+  --color-warning:     oklch(78% 0.14 75);    /* follow-up due */
+  --color-destructive: oklch(62% 0.18 25);    /* skipped / ghost */
+  --color-destructive-soft: oklch(62% 0.18 25 / 0.14);
+
+  /* ─── Charts (amber-led, blues recede) ────────────────────────── */
+  --color-chart-1: oklch(0.78 0.14 75);     /* amber — applied / signal */
+  --color-chart-2: oklch(0.62 0.13 245);    /* steel blue — pipeline */
+  --color-chart-3: oklch(0.65 0.10 200);    /* cool teal — discovered */
+  --color-chart-4: oklch(0.70 0.10 95);     /* muted gold */
+  --color-chart-5: oklch(0.65 0.13 15);     /* rose — skipped */
+  --color-chart-6: oklch(0.50 0.04 250);    /* slate */
+  --color-chart-7: oklch(0.55 0.10 280);    /* dim violet */
+  --color-chart-8: oklch(0.78 0.14 130);    /* sage */
+
+  /* ─── Fonts ────────────────────────────────────────────────────── */
+  --font-display: 'Fraunces', 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-sans:    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ─── Radii / shadows ─────────────────────────────────────────── */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
+  --shadow-card:       0 1px 2px oklch(0% 0 0 / 0.18), 0 0 0 1px oklch(100% 0 0 / 0.025) inset;
+  --shadow-card-hover: 0 4px 14px oklch(0% 0 0 / 0.32), 0 0 0 1px oklch(100% 0 0 / 0.045) inset;
+  --shadow-amber:      0 0 0 1px oklch(0.78 0.14 75 / 0.35), 0 0 18px oklch(0.78 0.14 75 / 0.18);
+}
+
+/* ─── Base ──────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+}
+html, body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 100% -10%, oklch(0.62 0.13 245 / 0.08), transparent 60%),
+    radial-gradient(ellipse 800px 600px at 0% 110%, oklch(0.78 0.14 75 / 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Subtle grain. Pure CSS — no asset. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Display utility */
+.font-display { font-family: var(--font-display); font-variation-settings: 'opsz' 144, 'SOFT' 50; }
+.font-display-tight { font-family: var(--font-display); font-variation-settings: 'opsz' 144, 'SOFT' 0; }
+
+/* Numerals: tabular by default for tables */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Selection */
+::selection {
+  background: oklch(0.78 0.14 75 / 0.32);
+  color: var(--color-foreground);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb {
+  background: var(--color-muted);
+  border-radius: 5px;
+  border: 2px solid var(--color-background);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-faint); }
+
+/* Focus ring — amber, restrained */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+/* Page entrance — staggered fade-in for top-level sections */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise-in 480ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.rise-1 { animation-delay: 40ms; }
+.rise-2 { animation-delay: 100ms; }
+.rise-3 { animation-delay: 180ms; }
+.rise-4 { animation-delay: 280ms; }
+.rise-5 { animation-delay: 380ms; }
+
+/* Slow horizon — for hero number cascade */
+@keyframes glint {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+.glint { animation: glint 6s ease-in-out infinite; }
+
+/* Marker dot for live indicator */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.78 0.14 75 / 0.5); }
+  50%      { box-shadow: 0 0 0 6px oklch(0.78 0.14 75 / 0); }
+}
+.pulse-dot { animation: pulse-dot 2.4s ease-in-out infinite; }
+
+/* Hairline divider with optical centering */
+.hairline {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-border) 12%,
+    var(--color-border-hover) 50%,
+    var(--color-border) 88%,
+    transparent
+  );
+}
+
+/* Custom marker for editorial lists */
+.editorial-list { list-style: none; padding: 0; }
+.editorial-list li {
+  position: relative;
+  padding-left: 1.25rem;
+}
+.editorial-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 0.5rem;
+  height: 1px;
+  background: var(--color-accent);
+}
+
+/* Code block in markdown */
+.prose-jobe pre {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.prose-jobe code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.prose-jobe :not(pre) > code {
+  background: var(--color-muted);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.prose-jobe a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: oklch(0.78 0.14 75 / 0.4);
+  text-underline-offset: 3px;
+}
+.prose-jobe h1, .prose-jobe h2, .prose-jobe h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.prose-jobe h2 { font-size: 1.5rem; margin-top: 1.75rem; margin-bottom: 0.75rem; }
+.prose-jobe h3 { font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+.prose-jobe p { margin: 0.6em 0; line-height: 1.65; color: var(--color-foreground); }
+.prose-jobe ul, .prose-jobe ol { margin: 0.6em 0; padding-left: 1.4em; }
+.prose-jobe li { margin: 0.25em 0; line-height: 1.55; }
+.prose-jobe table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  margin: 1rem 0;
+  width: 100%;
+}
+.prose-jobe th, .prose-jobe td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.prose-jobe th {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  color: var(--color-muted-foreground);
+  border-bottom: 1px solid var(--color-border-hover);
+}

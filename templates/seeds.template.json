@@ -1,0 +1,4 @@
+{
+  "$schema": "Discovery seed queries: (query, location) pairs in YOUR field, saved as data/queries/seeds.json in your workspace. `/jobe onboard` writes this from your target role titles and target locations, so after setup it reflects your actual search. It starts EMPTY on purpose: Jobe assumes nothing about your field. With no rows, discovery keeps every title and search driven sources are skipped. Row shape: { \"query\": \"<a role title you want>\", \"location\": \"<a metro, or Remote>\" }. Two rows from unrelated fields, to show the shape only: { \"query\": \"Registered Nurse\", \"location\": \"Remote\" } and { \"query\": \"Tax Accountant\", \"location\": \"Denver, CO\" }.",
+  "queries": []
+}

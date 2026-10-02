@@ -1,0 +1,8 @@
+{
+  "_doc": "Optional. Each entry is one major body of work. match finds the bullets (or resume lines) about it; at least one of those must also contain a mechanisms term, which names HOW the work was done (the method, technique, protocol, or process), not only its size or its outcome. Checked by: node scripts/check-evidence-depth.js (whole bullet library), node scripts/check-evidence-depth.js --resume <resume.json> (one resume), and as a warning when a resume is rendered (blocking under --strict). Leave systems empty to skip the check. The _examples block is ignored by the script; copy its shape, not its content.",
+  "_examples": [
+    { "id": "shift-scheduling", "match": ["shift scheduling", "rota"], "mechanisms": ["acuity based assignment", "fairness cap", "skill mix rule"] },
+    { "id": "ledger-reconciliation", "match": ["reconciliation", "month end close"], "mechanisms": ["three way match", "variance threshold", "exception queue"] }
+  ],
+  "systems": []
+}

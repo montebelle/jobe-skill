@@ -1,0 +1,76 @@
+{
+  "$comment": "Your bullet pool, saved as data/bullet-library.json in your workspace. `/jobe onboard` fills it from your own evidence. It starts EMPTY on purpose: until you add bullets nothing is assumed about your skills, and every posting is scored neutrally. Layout: one top level list per role you have held, under a role key of your choosing (current, prior1, prior2 and so on are only a convention), plus a selectedProjects list for work outside a job. companyKeyMap maps each company string in data/resume-baseline.json experience[].company to its role key; defaultBulletCounts in the baseline and bulletCounts in a per posting spec use the same keys. Bullet shape: { \"id\": \"<unique id>\", \"keywords\": [\"<skill or method this bullet proves>\"], \"text\": \"<the bullet as it should read on a resume>\", \"archetypes\": [\"<optional bucket name from data/archetypes.json>\"], \"studyGroup\": \"<optional label; two bullets with the same label never appear on one resume>\" }. A selectedProjects entry also takes \"name\", the project name shown on the resume. keywords matter: they are how Jobe learns which skills you can prove, so use the words a job description would use. Every bullet must trace to an entry in your reference.md. Keys that start with $ are notes and are ignored.",
+  "$examples": {
+    "$comment": "Two unrelated professions, to show the shape only. Neither is a default and none of this text is yours to use. Do not copy these bullets.",
+    "registered nurse": {
+      "companyKeyMap": { "Example Hospital": "current", "Example Clinic": "prior1" },
+      "current": [
+        {
+          "id": "current-1",
+          "archetypes": [],
+          "keywords": ["patient education", "discharge planning", "readmission"],
+          "text": "Cut 30 day readmissions on a 28 bed cardiac unit by 18 percent by redesigning discharge teaching into three bedside sessions with a teach back check, later adopted by two sister units."
+        },
+        {
+          "id": "current-2",
+          "archetypes": [],
+          "keywords": ["medication administration", "barcode scanning", "patient safety"],
+          "text": "Reduced medication administration errors by 40 percent over two quarters by leading the unit rollout of bedside barcode scanning and coaching 22 nurses through the first month."
+        }
+      ],
+      "prior1": [
+        {
+          "id": "prior1-1",
+          "archetypes": [],
+          "keywords": ["triage", "emergency department"],
+          "text": "Triaged an average of 35 patients per shift in an emergency department, keeping door to provider time under 20 minutes during a regional surge."
+        }
+      ],
+      "selectedProjects": [
+        {
+          "id": "proj-1",
+          "name": "Preceptor program",
+          "archetypes": [],
+          "keywords": ["precepting", "onboarding"],
+          "text": "Built a six week preceptor checklist for new graduate nurses that shortened time to an independent assignment from ten weeks to seven."
+        }
+      ]
+    },
+    "tax accountant": {
+      "companyKeyMap": { "Example Tax Group": "current", "Example Manufacturing": "prior1" },
+      "current": [
+        {
+          "id": "current-1",
+          "archetypes": [],
+          "keywords": ["tax return preparation", "partnership returns", "review"],
+          "text": "Prepared and reviewed 140 partnership and S corporation returns per season with a 98 percent first pass acceptance rate, using a standard workpaper index the whole team now follows."
+        },
+        {
+          "id": "current-2",
+          "archetypes": [],
+          "keywords": ["tax research", "state nexus", "client advisory"],
+          "text": "Saved a manufacturing client 210,000 dollars in state tax by documenting nexus in four states and restructuring where inventory is held."
+        }
+      ],
+      "prior1": [
+        {
+          "id": "prior1-1",
+          "archetypes": [],
+          "keywords": ["month end close", "reconciliation"],
+          "text": "Shortened month end close from nine business days to five by automating bank and intercompany reconciliations in the general ledger."
+        }
+      ],
+      "selectedProjects": [
+        {
+          "id": "proj-1",
+          "name": "Volunteer tax clinic",
+          "archetypes": [],
+          "keywords": ["individual returns", "volunteer coordination"],
+          "text": "Coordinated a volunteer tax clinic that filed 310 individual returns in one season with no rejected filings."
+        }
+      ]
+    }
+  },
+  "companyKeyMap": {},
+  "selectedProjects": []
+}

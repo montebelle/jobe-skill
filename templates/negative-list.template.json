@@ -1,0 +1,5 @@
+{
+  "$schema": "Companies you do not want to see in discovery results, saved as data/companies/negative-list.json in your workspace. It starts EMPTY: nothing is hidden until you say so. companySlugs are lowercase and hyphenated, matching Posting.companySlug (for example \"Example Health System\" becomes \"example-health-system\"). reasons is optional and maps a slug to a short note for your own reference. Staffing agencies and job aggregators are handled separately by the shared data/companies/staffing-list.json, so they do not need to be listed here.",
+  "companySlugs": [],
+  "reasons": {}
+}

@@ -1,0 +1,23 @@
+{
+  "$comment": "Shared system config, the same for every workspace on this machine. Nothing personal belongs here: per user policy (work modes, countries, recency, title rules, salary floor, candidate facts) lives in <workspace>/data/profile.json, see templates/profile.template.json. To use a different file, set JOBE_CONFIG to its path.",
+  "scoring_weights": {
+    "requiredSkills": 3,
+    "preferredSkills": 1,
+    "toolsAndSystems": 2,
+    "domainKnowledge": 2,
+    "experienceLevel": 2,
+    "education": 1,
+    "softCultural": 0.5
+  },
+  "match_thresholds": {
+    "strong": 80,
+    "good": 65,
+    "stretch": 55,
+    "reach": 0
+  },
+  "api_keys": {
+    "serpapi": { "env_var": "SERPAPI_KEY", "required": false }
+  },
+  "output_dir": "signals/snapshots",
+  "report_dir": "reports"
+}

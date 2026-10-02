@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="oklch(11% 0.025 245)"/>
+  <path d="M16 16 L16 40 Q16 48 24 48 L32 48"
+        stroke="oklch(0.62 0.13 245)" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <circle cx="44" cy="20" r="4" fill="oklch(0.78 0.14 75)"/>
+  <text x="20" y="30" font-family="Georgia, serif" font-style="italic"
+        font-size="14" font-weight="500" fill="oklch(0.78 0.14 75)">j</text>
+</svg>

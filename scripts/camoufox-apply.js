@@ -1,0 +1,646 @@
+#!/usr/bin/env node
+// Camoufox auto-apply orchestrator (single long-lived process per job).
+//
+// The browser stays alive for the whole job so form state survives the
+// pre-submit glance and the post-submit email-confirmation step. The agent
+// drives sequencing through a tiny file channel:
+//
+//   signals/apply/<slug>/state.json    <- written by THIS script (phase + report)
+//   signals/apply/<slug>/control.json  <- written by the AGENT to advance:
+//        {action:"submit"}            click submit
+//        {action:"skip"}              abandon this job
+//        {action:"answers", answers:[{label,text}|{label,option}]}  fill custom Q's, re-screenshot
+//                                    (an ARRAY of items, each optionally with nth; free-text uses text,
+//                                     comboboxes/choices use option. A partial option value that the
+//                                     react-select typeahead can narrow to the target (the first word of
+//                                     a long option) is more robust than the exact string. A required
+//                                     field can surface only on the submit-rescan; pass it by its label
+//                                     even if it was not in state.questions[].)
+//        {action:"security-code", code:"..."}         fill an emailed anti-spam code, then resubmit
+//        {action:"confirm", link:"https://..."}       open an email confirm link
+//
+// Usage:
+//   node scripts/camoufox-apply.js run <slug> [--url U] [--headless|--headful] [--no-submit]
+//        [--salary N] [--allow-onsite] [--warm|--no-warm]
+//        (headless is the default; --headful only to watch/clear a wall)
+//   node scripts/camoufox-apply.js confirm <url> [--headful]   # open a link standalone (headless default)
+//
+// What the user's files decide (nothing here is a built-in preference):
+//   data/profile.json        discovery.workModes / discovery.countries drive the
+//                            location guard. No policy on file -> no block.
+//                            --allow-onsite skips the guard for one run.
+//   data/apply-profile.json  the form answers, salaryStrategy (which figure of a
+//                            posted pay band to enter: midpoint | top | bottom),
+//                            and an optional browser locale.
+// Salary precedence: --salary, then the band published on the live posting run
+// through salaryStrategy, then the stored value from the report / apply-profile.
+//
+// ponytail: the success / spam / security-code detectors below are English
+// phrase lists. A form in another language ends in submit-failed (never a false
+// "submitted"); add phrases per language when a user needs one.
+
+const fs = require('fs');
+const path = require('path');
+const { launchCamoufox, newStealthPage } = require('../lib/apply/camoufox');
+const { buildAnswers, loadApplyProfile, fromBand, bandFromText } = require('../lib/apply/answers');
+const { detectAts, fillForm, fillQuestions, clickApplyIfPresent, submitLocator, dismissConsentOverlays } = require('../lib/apply/filler');
+const { normalizeApplyUrl } = require('../lib/apply/url-normalize');
+const { parseLocation, classifyRemote, classifyUs } = require('../lib/posting');
+
+const { getUserRoot } = require('../lib/config');
+const { loadProfile, discoveryFilters, countryOk, modePass } = require('../lib/profile');
+// Apply artifacts (state, control, screenshots, queue, warm profiles) live in
+// the ACTIVE user's workspace. The requires above load SHARED code from the
+// install via relative paths, so they are unaffected by the workspace root.
+const WS = getUserRoot();
+
+// playwright-core (newer than the Camoufox Juggler build) crashes while parsing
+// a page-level JS error event whose shape it does not expect — it reads
+// `pageError.location.url` when `location` is undefined. That error originates
+// in the target site's own JS (common on heavy career pages), is unrelated to
+// our fill, and would otherwise kill the process. Swallow ONLY that exact
+// library bug; let every other uncaught exception fail loudly.
+// (Installed only when this file is the entry point; see the bottom.)
+function installCrashFilter() {
+  process.on('uncaughtException', (err) => {
+    if (err && /reading 'url'/.test(err.message || '')) {
+      console.error('[cfx] ignored benign page JS error (playwright/Camoufox version skew)');
+      return;
+    }
+    console.error('[cfx] uncaughtException:', err);
+    process.exit(1);
+  });
+}
+
+function args() {
+  const a = process.argv.slice(2);
+  const cmd = a[0];
+  const positional = a.slice(1).filter((x) => !x.startsWith('--'));
+  const flags = {};
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === '--url') flags.url = a[++i];
+    else if (a[i] === '--headful') flags.headful = true; // headless is the default (cleaner under Camoufox); --headful only to watch / clear a wall
+    else if (a[i] === '--headless') flags.headless = true; // explicit form of the default; wins over --headful
+    else if (a[i] === '--no-submit') flags.noSubmit = true;
+    else if (a[i] === '--allow-onsite') flags.allowOnsite = true;
+    else if (a[i] === '--warm') flags.warm = true;       // force reCAPTCHA-v3 warm mode (default on for Ashby)
+    else if (a[i] === '--no-warm') flags.noWarm = true;  // disable it even for Ashby
+    else if (a[i] === '--salary') flags.salary = a[++i];
+  }
+  flags.headless = flags.headless || !flags.headful;
+  return { cmd, positional, flags };
+}
+
+function ctrlDir(slug) {
+  const d = path.join(WS, 'signals', 'apply', slug);
+  fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+function writeState(slug, state) {
+  fs.writeFileSync(path.join(ctrlDir(slug), 'state.json'), JSON.stringify(state, null, 2));
+}
+function readControl(slug) {
+  const f = path.join(ctrlDir(slug), 'control.json');
+  if (!fs.existsSync(f)) return null;
+  try { const c = JSON.parse(fs.readFileSync(f, 'utf8')); fs.unlinkSync(f); return c; } catch { return null; }
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function waitForControl(slug, { timeoutMs = 5 * 60 * 1000 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const c = readControl(slug);
+    if (c) return c;
+    await sleep(1000);
+  }
+  return { action: 'timeout' };
+}
+
+function urlForSlug(slug) {
+  try {
+    const q = JSON.parse(fs.readFileSync(path.join(WS, 'data', 'apply-queue.json'), 'utf8'));
+    const e = q.find((x) => x.slug === slug);
+    return e ? e.primaryUrl : null;
+  } catch { return null; }
+}
+
+async function screenshot(page, slug, tag) {
+  const p = path.join(ctrlDir(slug), `${tag}.png`);
+  await page.screenshot({ path: p, fullPage: true }).catch(() => {});
+  return p;
+}
+
+function logBlock(title, obj) {
+  console.log(`\n=== ${title} ===`);
+  console.log(JSON.stringify(obj, null, 2));
+}
+
+// Greenhouse (and some other ATS) gate submission behind an emailed security
+// code: the first submit emails a code and the page shows a "security code"
+// field that must be filled before re-submitting. This is an email-verification
+// step, NOT a missing form field — detect it so the run stays alive and the
+// agent can read the code from email and inject it.
+const CODE_RE = /security code|verification code|enter the code we (sent|emailed)|we (sent|emailed) you a (security |verification )?code|check your (inbox|email) for (the |a |your )?(security |verification )?code|copy and paste this code/i;
+
+// Fill the emailed security/verification code field. Targets security/
+// verification/confirmation inputs specifically so it never lands in a
+// country/zip "code" field; falls back to a label-text scan.
+async function fillSecurityCode(page, code) {
+  const codeStr = String(code).trim();
+  // Segmented OTP input FIRST: Greenhouse renders the security code as N
+  // single-character boxes (input maxlength=1), not one text field. Focus the
+  // first box and type the whole code (these auto-advance); fall back to
+  // filling each box explicitly if auto-advance does not stick.
+  try {
+    const otp = page.locator('input[maxlength="1"]');
+    const n = await otp.count();
+    if (n >= 4 && n >= codeStr.length) {
+      await otp.first().scrollIntoViewIfNeeded().catch(() => {});
+      await otp.first().click();
+      await page.keyboard.type(codeStr, { delay: 60 });
+      await page.waitForTimeout(300);
+      const firstVal = await otp.first().inputValue().catch(() => '');
+      if (!firstVal) {
+        for (let i = 0; i < codeStr.length && i < n; i++) {
+          try { await otp.nth(i).fill(codeStr[i]); } catch { /* next */ }
+        }
+      }
+      return true;
+    }
+  } catch { /* fall through to single-field */ }
+  const sels = [
+    'input[name*="security" i]', 'input[id*="security" i]', 'input[aria-label*="security" i]', 'input[placeholder*="security" i]',
+    'input[name*="verification" i]', 'input[id*="verification" i]', 'input[placeholder*="verification" i]',
+    'input[name*="confirmation" i]', 'input[placeholder*="confirmation code" i]',
+  ];
+  for (const sel of sels) {
+    const loc = page.locator(sel).first();
+    try { if (await loc.count()) { await loc.scrollIntoViewIfNeeded().catch(() => {}); await loc.fill(String(code)); return true; } } catch { /* next */ }
+  }
+  // label/context fallback: an input whose nearby text names a security code
+  const found = await page.evaluate(() => {
+    const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+    const wants = /security code|verification code|confirmation code|enter the code|code we (sent|emailed)/i;
+    for (const el of inputs) {
+      const lbl = (el.labels && el.labels[0] && el.labels[0].innerText) || el.getAttribute('aria-label') || el.placeholder || '';
+      const p = el.closest('div,section,fieldset,form');
+      const ctx = lbl + ' ' + ((p && p.innerText) || '').slice(0, 200);
+      if (wants.test(ctx)) { el.setAttribute('data-cfx-code', '1'); return true; }
+    }
+    return false;
+  }).catch(() => false);
+  if (found) { try { await page.locator('[data-cfx-code="1"]').first().fill(String(code)); return true; } catch { /* fall through */ } }
+  return false;
+}
+
+// Robust submit-button click shared by the submit and security-code paths.
+async function clickSubmit(page) {
+  await dismissConsentOverlays(page).catch(() => {});
+  const btn = submitLocator(page);
+  if (!(await btn.count())) return false;
+  await btn.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+  try { await btn.click({ timeout: 15000 }); return true; }
+  catch { try { await btn.click({ force: true, timeout: 8000 }); return true; }
+  catch { try { await btn.evaluate((el) => el.click()); return true; } catch { return false; } } }
+}
+
+// Some ATS forms (Greenhouse board embeds) render the application INSIDE an
+// iframe. The scanner + fillers use page.locator/evaluate, which only see the
+// main frame, so on an embed they tag just the board header search box and
+// find 0 real fields. Detect the frame that actually holds the form and route
+// ELEMENT ops (locator/evaluate/$/innerText) to it while keeping INPUT ops
+// (keyboard/mouse/timeout) on the page, so fill+submit+verify work in-embed.
+async function bestFormFrame(page) {
+  let best = null, bestN = 0;
+  for (const f of page.frames()) {
+    const n = await f.evaluate(() => document.querySelectorAll('input:not([type=hidden]),select,textarea').length).catch(() => 0);
+    if (n > bestN) { bestN = n; best = f; }
+  }
+  return (best && best !== page.mainFrame() && bestN >= 3) ? best : null;
+}
+function frameCtx(page, frame) {
+  return {
+    locator: (s, o) => frame.locator(s, o),
+    evaluate: (fn, a) => frame.evaluate(fn, a),
+    $: (s) => frame.$(s),
+    $$: (s) => frame.$$(s),
+    innerText: (s) => frame.innerText(s),
+    keyboard: page.keyboard,
+    mouse: page.mouse,
+    waitForTimeout: (ms) => page.waitForTimeout(ms),
+    setDefaultTimeout: (ms) => page.setDefaultTimeout(ms),
+    screenshot: (o) => page.screenshot(o),
+    isClosed: () => page.isClosed(),
+    _page: page, _frame: frame,
+  };
+}
+
+// Location guard verdict for the live posting page, against the user's own
+// policy (data/profile.json discovery.workModes / discovery.countries, as
+// returned by discoveryFilters). Discovery can leak a posting outside the
+// policy (an onsite posting slipped through once), so the harness re-checks
+// before it submits. Precision-first: block only when the page clearly states
+// a work mode or a country outside the policy; 'unknown' proceeds (the glance
+// still catches it). An empty policy never blocks.
+//   li: { loc, title, body } read off the page.
+//   returns { blocked, remote, us, locationText, why?, note? }
+function locationVerdict(li, policy) {
+  const loc = (li && li.loc) || '';
+  const title = (li && li.title) || '';
+  const body = (li && li.body) || '';
+  const workModes = (policy && policy.workModes) || [];
+  const countries = (policy && policy.countries) || [];
+  const pl = parseLocation(loc);
+  const remote = classifyRemote(pl.remote, title, '');
+  const us = classifyUs(pl.us, title);
+  const policyText = `workModes=[${workModes.join(', ')}] countries=[${countries.join(', ')}]`;
+  // The listing stage rule discovery uses: a city alone reads as 'onsite' but
+  // states no mode, so it blocks only a remote only policy.
+  // ponytail: an explicit "On-site" label classifies the same as a bare city,
+  // so for a user who accepts hybrid it proceeds to the glance; block it once
+  // parseLocation tells a stated onsite from a bare city.
+  const modeBlocked = !modePass({ remote }, { workModes, remoteOnly: workModes.length === 1 && workModes[0] === 'remote' }, false);
+  const countryBlocked = !countryOk(loc, countries, title);
+  if (modeBlocked || countryBlocked) {
+    return { blocked: true, remote, us, locationText: loc, why: `location "${loc}" -> workMode=${remote}${countryBlocked ? ', country not in your list' : ''}. Outside your location policy (${policyText}).` };
+  }
+  // JD-body residency requirement that excludes the user's country: a role
+  // whose prose requires residency somewhere else, with no allowance for the
+  // user's country, is a knockout.
+  // ponytail: implemented for a US only policy (countries exactly ["US"]), the
+  // one case the two country lists below cover. Any other country policy
+  // relies on the location field check above; generalize by building both
+  // lists from discovery.countries when a user needs it.
+  if (policy && policy.usOnly) {
+    const RESIDENCY_RE = /\b(must|required to|need to|only considering candidates?|open (only )?to candidates?|role (is|will be) based|position is based|you (must|will) (be|need to be) (based|located)|based (in|out of)|located (in|within)|reside (in|within)|residents? of|authorized to work in|eligible to work in)\b[^.]{0,80}\b(india|australia|new zealand|canada|united kingdom|\buk\b|europe|emea|apac|singapore|germany|ireland|brazil|mexico|philippines|latam|argentina)\b/i;
+    const usAllowed = /\b(united states|\bus\b|u\.s\.|usa|us[- ]based|us remote|remote[- ]?us|anywhere|globally|worldwide|any location)\b/i.test(body);
+    const foreign = RESIDENCY_RE.exec(body);
+    if (foreign && !usAllowed) {
+      return { blocked: true, remote, us: 'jd-foreign-residency', locationText: 'JD body: ' + foreign[0].slice(0, 120), why: `JD body requires residency outside your country list: "${foreign[0].slice(0, 90)}" (no allowance for your country found). Not applying.` };
+    }
+    if (foreign) return { blocked: false, remote, us, locationText: loc, note: '(JD names another country but also allows yours)' };
+  }
+  return { blocked: false, remote, us, locationText: loc };
+}
+
+async function run() {
+  const { positional, flags } = args();
+  const slug = positional[0];
+  if (!slug) { console.error('usage: run <slug> [--url U] [--headless|--headful] [--no-submit] [--salary N] [--allow-onsite] [--warm|--no-warm]   (headless is the default; --headful only to watch/clear a wall)'); process.exit(2); }
+
+  // Consume-on-read makes a STALE control.json from a previous session lethal:
+  // a leftover {"action":"submit"} would fire before the agent sends anything.
+  // Always start a run with a clean control channel.
+  try { fs.unlinkSync(path.join(ctrlDir(slug), 'control.json')); console.log('[cfx] cleared stale control.json'); } catch { /* none */ }
+
+  const { answers, meta } = buildAnswers(slug);
+  if (flags.salary) answers.salaryExpectation = flags.salary; // an explicit figure for this run wins over every band
+  const locale = loadApplyProfile().locale; // optional browser locale; launchCamoufox validates it
+  const rawUrl = flags.url || meta.postingUrl || urlForSlug(slug);
+  if (!rawUrl) { console.error('no URL: pass --url or ensure the slug is in the queue / report.'); process.exit(2); }
+  // Normalize to the URL that actually shows the application FORM (Ashby
+  // /application, careers-wrapper -> Greenhouse embed), and bail out cleanly on
+  // Workday (account-creation wall) so we never burn a navigation that can't be
+  // filled. Landing on the form first try also avoids the re-navigate/re-submit
+  // churn that trips ATS spam detection.
+  const norm = normalizeApplyUrl(rawUrl);
+  if (norm.needsManual) {
+    writeState(slug, { phase: 'needs-manual', slug, url: rawUrl, ats: norm.ats, reason: norm.reason, ts: Date.now() });
+    console.log(`[cfx] needs-manual: ${norm.reason}`);
+    return;
+  }
+  const url = norm.url;
+  const ats = norm.ats !== 'unknown' ? norm.ats : detectAts(url);
+
+  // WARM mode (Ashby): Ashby boards run invisible reCAPTCHA v3, which grades
+  // session warmth + human behavior — the fresh-fingerprint default scores cold
+  // and gets "possible spam". So for Ashby: (1) a PERSISTENT profile that
+  // accumulates Google/reCAPTCHA cookies across runs, (2) a Google warm-up visit
+  // that seeds those cookies in-session, (3) slower human-cadence typing, (4) a
+  // pre-submit dwell. The persistent profile is shared, so it MUST run one job
+  // at a time — a lock enforces it. Override detection with --warm / --no-warm.
+  const warm = flags.warm || (ats === 'ashby' && !flags.noWarm);
+  const profileDir = warm ? path.join(WS, 'signals', 'apply', '_profiles', ats) : null;
+  const lockDir = profileDir ? profileDir + '.lock' : null;
+  if (warm) {
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true }); // ensure signals/apply/_profiles/ exists before the atomic lock mkdir
+    try { fs.mkdirSync(lockDir); } // atomic: fails if another run holds the shared profile
+    catch {
+      const age = (() => { try { return Date.now() - fs.statSync(lockDir).mtimeMs; } catch { return 1e9; } })();
+      if (age < 15 * 60 * 1000) {
+        writeState(slug, { phase: 'needs-manual', slug, url, reason: `Ashby warmed profile busy (another apply is running). Ashby must run one at a time — retry when it frees.`, ts: Date.now() });
+        console.log('[cfx] Ashby profile locked by another run — one-at-a-time only. Bailing.');
+        return;
+      }
+      fs.rmSync(lockDir, { recursive: true, force: true }); fs.mkdirSync(lockDir); // stale lock: reclaim
+    }
+    fs.mkdirSync(profileDir, { recursive: true });
+  }
+  const releaseLock = () => { if (lockDir) { try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* ok */ } } };
+
+  console.log(`[cfx] slug=${slug} ats=${ats} headless=${flags.headless}${warm ? ' warm=true (persistent profile + reCAPTCHA-v3 mitigations)' : ''}`);
+  if (!flags.headless) console.warn('[cfx] WARNING: headful (visible browser) can TRIGGER Camoufox security/spam checks — headless runs cleaner for real submits (a real display leaks signals that conflict with the spoofed fingerprint). Use --headful only to watch or clear a wall.');
+  if (norm.reason !== 'unchanged') console.log(`[cfx] url normalized (${norm.reason})`);
+  console.log(`[cfx] url=${url}`);
+  if (!meta.hasReport) console.log('[cfx] WARNING: no tailored report for this slug — filling contact fields only, no resume/cover.');
+
+  // Persistent profile: fall back to a fresh Browser if the persistent-context
+  // launch is incompatible with this Camoufox/playwright-core build — the
+  // warm-up visit + slow typing still apply, so we lose only cross-run cookies.
+  let browser;
+  try { browser = await launchCamoufox({ headless: flags.headless, locale, userDataDir: profileDir || undefined }); }
+  catch (e) { if (profileDir) { console.warn('[cfx] persistent profile launch failed, falling back to fresh:', (e.message || '').split('\n')[0]); browser = await launchCamoufox({ headless: flags.headless, locale }); } else throw e; }
+  let page;
+  try {
+    ({ page } = await newStealthPage(browser));
+    page.setDefaultTimeout(8000); // stale React-re-rendered locators should fail fast, not hang 30s
+    if (warm) {
+      // Warm-up: a real Google visit seeds the reCAPTCHA/Google cookies v3 reads,
+      // and scrolling generates organic telemetry before the graded form.
+      try {
+        await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(1800);
+        await page.mouse.move(400, 300).catch(() => {});
+        await page.evaluate(() => window.scrollTo(0, 250)).catch(() => {});
+        await page.waitForTimeout(1200);
+        console.log('[cfx] warm-up visit done (seeded Google/reCAPTCHA session)');
+      } catch (e) { console.warn('[cfx] warm-up visit failed (non-fatal):', (e.message || '').split('\n')[0]); }
+    }
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(warm ? 3500 : 2000);
+
+    // Defense-in-depth location guard (see locationVerdict): verify the LIVE
+    // page against the user's own location policy before submitting. With no
+    // policy on file nothing is read and nothing is blocked.
+    const policy = discoveryFilters(loadProfile());
+    if (!flags.allowOnsite && (policy.workModes.length || policy.countries.length)) {
+      const li = await page.evaluate(() => {
+        const sels = ['.posting-categories', '.location', '.job__location', '[class*="location" i]', '.posting-category'];
+        const parts = [];
+        for (const s of sels) document.querySelectorAll(s).forEach((e) => parts.push(e.innerText));
+        // Also pull the JD BODY text so a residency requirement stated only in
+        // prose ("must be based in <country>") is caught — a field-only guard
+        // misses a JD-body location knockout, which can burn the application.
+        const body = (document.body && document.body.innerText || '').replace(/\s+/g, ' ');
+        return { loc: parts.join(' | ').replace(/\s+/g, ' ').trim().slice(0, 240), title: document.title || ((document.querySelector('h1,h2') || {}).innerText || ''), body: body.slice(0, 20000) };
+      }).catch(() => ({ loc: '', title: '', body: '' }));
+      const v = locationVerdict(li, policy);
+      if (v.blocked) {
+        writeState(slug, { phase: 'blocked-location', slug, url, locationText: v.locationText, remote: v.remote, us: v.us, policy: { workModes: policy.workModes, countries: policy.countries }, ts: Date.now() });
+        console.log(`[cfx] BLOCKED: ${v.why} Re-run with --allow-onsite to override.`);
+        return;
+      }
+      console.log(`[cfx] location ok: "${li.loc || '(none found)'}" -> workMode=${v.remote}${v.note ? ' ' + v.note : ''}`);
+    }
+
+    const navigated = await clickApplyIfPresent(page);
+    if (navigated) await page.waitForTimeout(1500);
+
+    // If the application form is inside an embed iframe (Greenhouse board
+    // embeds), route fill/submit/verify to that frame; ctx === page for normal
+    // forms.
+    let ctx = page;
+    try {
+      const ff = await bestFormFrame(page);
+      if (ff) { ctx = frameCtx(page, ff); console.log('[cfx] application form is in an embed iframe -> using frame context'); }
+    } catch { /* stay on page */ }
+
+    // Salary: read the pay band the LIVE posting publishes and run it through
+    // the user's salaryStrategy. Most Greenhouse/Ashby forms display the range;
+    // a live band beats a stale or absent stored one and is per-job. An
+    // explicit --salary wins over it. The parsing is in bandFromText (anchored
+    // to pay vocabulary; yearly bands in the user's currency only), so an
+    // hourly rate, a stipend, or another currency means the stored value stands.
+    if (!flags.salary) {
+      try {
+        const parts = await Promise.all([
+          page.evaluate(() => (document.body.innerText || '').slice(0, 20000)).catch(() => ''),
+          ctx === page ? Promise.resolve('') : ctx.evaluate(() => (document.body.innerText || '').slice(0, 20000)).catch(() => ''),
+        ]);
+        const band = bandFromText(parts.join(' '), policy.salaryCurrency);
+        const live = fromBand(band, answers.salaryStrategy);
+        if (live) { answers.salaryExpectation = String(live); console.log(`[cfx] on-page pay band ${band.min}-${band.max} -> salary ${live} (salaryStrategy=${answers.salaryStrategy})`); }
+        else if (answers.salaryExpectation) console.log(`[cfx] no anchored on-page band; using stored salary ${answers.salaryExpectation}`);
+      } catch { /* non-fatal: the stored value stands */ }
+    }
+
+    const report = await fillForm(ctx, answers, { slow: warm });
+    const shot = await screenshot(page, slug, 'preview');
+
+    writeState(slug, { phase: 'filled', slug, ats, url, ...report, screenshot: shot, ts: Date.now() });
+    logBlock('FILLED', { ...report, screenshot: shot });
+
+    console.log('\n=== GLANCE ===');
+    console.log(`Company: ${meta.company || '?'}   Role: ${meta.role || '?'}`);
+    console.log(`Filled ${report.filled.length}/${report.totalFields} fields. Resume uploaded: ${report.resumeUploaded}`);
+    if (report.questions.length) console.log(`Custom questions needing answers: ${report.questions.length}`);
+    if (report.unfilled.length) console.log(`Could not fill: ${report.unfilled.length} (see state.json)`);
+    console.log(`Screenshot: ${shot}`);
+    if (/^yes$/i.test(answers.nonCompete || '')) console.log('NOTE: your apply profile says you are bound by a non-competition agreement. Whether this employer is a restricted competitor is your decision; the harness does not decide it.');
+
+    if (flags.noSubmit) {
+      console.log('\n[cfx] --no-submit: fill-only smoke test complete. Leaving form filled, closing in 4s.');
+      await page.waitForTimeout(4000);
+      return;
+    }
+
+    // drive submit / answers / skip / confirm via the control channel
+    let submitted = false;
+    let rescans = 0;
+    while (!submitted) {
+      console.log(`\n[cfx] awaiting control.json in ${path.join('signals/apply', slug)} (submit | skip | answers | confirm) ...`);
+      const c = await waitForControl(slug, { timeoutMs: 30 * 60 * 1000 });
+      // Containment: a residual transient page error inside an action must NOT
+      // propagate to the outer catch (which closes the browser and ends the
+      // run). If the page object is still usable, write a recoverable state and
+      // let the agent retry; only a genuinely closed page falls through to exit.
+      try {
+      if (c.action === 'skip' || c.action === 'timeout') {
+        writeState(slug, { phase: c.action, slug, ts: Date.now() });
+        console.log(`[cfx] ${c.action} — closing.`);
+        return;
+      }
+      if (c.action === 'answers') {
+        // answers is an ARRAY of {label, text|option, nth?}; anything else no-ops
+        const done = await fillQuestions(ctx, Array.isArray(c.answers) ? c.answers : []);
+        const s2 = await screenshot(page, slug, 'preview');
+        writeState(slug, { phase: 'filled', slug, ats, url, answeredIdx: done, screenshot: s2, ts: Date.now() });
+        console.log(`[cfx] filled ${done.length} custom answers; re-screenshot ${s2}`);
+        continue;
+      }
+      // Emailed security code (Greenhouse anti-spam): fill it, then re-submit.
+      if (c.action === 'security-code') {
+        if (!c.code) { console.log('[cfx] security-code action missing code'); continue; }
+        const filledCode = await fillSecurityCode(ctx, c.code);
+        if (!filledCode) {
+          const s = await screenshot(page, slug, 'preview');
+          writeState(slug, { phase: 'needs-security-code', slug, ats, url, error: 'security code field not found on page', screenshot: s, ts: Date.now() });
+          console.log('[cfx] security code field not found'); continue;
+        }
+        const clickedCode = await clickSubmit(ctx);
+        if (!clickedCode) { writeState(slug, { phase: 'needs-security-code', slug, error: 'resubmit click failed after code', screenshot: await screenshot(page, slug, 'preview').catch(() => null), ts: Date.now() }); continue; }
+        await page.waitForTimeout(4500);
+        // Read via the form frame, but fall back to the main page: a submit can
+        // trigger a TOP-LEVEL navigation that detaches the embed iframe, and an
+        // empty/thrown frame read must not misroute a REAL success into rescan.
+        let afterC = await ctx.innerText('body').catch(() => '');
+        if (!afterC && ctx !== page) afterC = await page.innerText('body').catch(() => '');
+        const sC = await screenshot(page, slug, 'submitted');
+        const successC = /(thank you|thanks for applying|thank you for applying|application (has been )?(received|submitted|sent)|successfully (applied|submitted|sent)|we('| ha)ve received your application|your application (has been (submitted|received)|is in)|we('| ha)ve got it|got it from here|application is in|we appreciate your interest)/i.test(afterC);
+        if (successC) {
+          writeState(slug, { phase: 'submitted', slug, postSubmitExcerpt: afterC.slice(0, 600), needsEmailConfirm: false, screenshot: sC, ts: Date.now() });
+          console.log('[cfx] submitted (success after security code).');
+          submitted = true; continue;
+        }
+        if (CODE_RE.test(afterC)) {
+          writeState(slug, { phase: 'needs-security-code', slug, ats, url, error: 'code rejected or a new code was issued — read the latest email', postSubmitExcerpt: afterC.replace(/\s+/g, ' ').slice(0, 400), screenshot: sC, ts: Date.now() });
+          console.log('[cfx] security code not accepted — awaiting a fresh code.'); continue;
+        }
+        const errC = await ctx.locator('[role="alert"], [class*="error" i], [aria-invalid="true"]').allInnerTexts().catch(() => []);
+        writeState(slug, { phase: 'submit-failed', slug, error: (errC.join(' | ') || 'no success after security code').replace(/\s+/g, ' ').slice(0, 400), postSubmitExcerpt: afterC.slice(0, 400), screenshot: sC, ts: Date.now() });
+        console.log('[cfx] submit not confirmed after security code.'); return;
+      }
+      if (c.action === 'submit') {
+        // Robust submit click: a sticky-footer Submit button often fails the
+        // default click's "stable" wait (animation / lazy scroll) — clickSubmit
+        // scrolls then falls back to force/DOM click so a settling button does
+        // not abort the submit and orphan the browser.
+        if (!(await submitLocator(ctx).count())) { writeState(slug, { phase: 'error', error: 'no submit button found', ts: Date.now() }); console.log('[cfx] no submit button found'); return; }
+        if (warm) {
+          // Pre-submit dwell: reCAPTCHA v3 grades activity right up to
+          // grecaptcha.execute() (fired on submit). Scroll + linger so the score
+          // reflects a human reviewing the form, not an instant machine submit.
+          await page.mouse.move(500, 400).catch(() => {});
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+          await page.waitForTimeout(2600);
+          await page.evaluate(() => window.scrollBy(0, -200)).catch(() => {});
+          await page.waitForTimeout(1400);
+        }
+        const clicked = await clickSubmit(ctx);
+        if (!clicked) {
+          const s = await screenshot(page, slug, 'submitted').catch(() => null);
+          writeState(slug, { phase: 'submit-failed', slug, error: 'submit button click did not land (not stable/clickable)', screenshot: s, ts: Date.now() });
+          console.log('[cfx] submit click failed after 3 strategies'); continue;
+        }
+        await page.waitForTimeout(4500);
+        // Frame-detach fallback (see security-code path): never let a detached
+        // embed frame turn a real success banner into a submit-failed.
+        let after = await ctx.innerText('body').catch(() => '');
+        if (!after && ctx !== page) after = await page.innerText('body').catch(() => '');
+        const s3 = await screenshot(page, slug, 'submitted');
+        // Verify SUCCESS before claiming submitted — a validation error leaves
+        // the form up, and silently recording a failed submit as "applied" is
+        // worse than reporting the failure.
+        // Success banners vary widely by ATS/company ("Thanks for applying",
+        // "we've got it from here", "your application is in", etc.). A too-narrow
+        // regex false-negatives a real submit and the run records it as failed —
+        // keep these variants broad.
+        const success = /(thank you|thanks for applying|thank you for applying|application (has been )?(received|submitted|sent)|successfully (applied|submitted|sent)|we('| ha)ve received your application|your application (has been (submitted|received)|is in)|we('| ha)ve got it|got it from here|application is in|we appreciate your interest)/i.test(after);
+        // Anti-abuse / spam wall is a DISTINCT terminal state: the agent must
+        // NOT retry it (re-submitting is exactly what escalates the flag and
+        // can blacklist the candidate's email/IP across the ATS network).
+        const spam = /flagged as (possible )?spam|couldn'?t submit your application|detected as spam|too many (attempts|requests)|unusual activity/i.test(after);
+        if (spam) {
+          writeState(slug, { phase: 'submit-blocked-spam', slug, postSubmitExcerpt: after.replace(/\s+/g, ' ').slice(0, 400), screenshot: s3, ts: Date.now() });
+          console.log('[cfx] SUBMIT BLOCKED (spam/anti-abuse) — do NOT retry this posting; back off.');
+          return;
+        }
+        // Emailed security code required (Greenhouse anti-spam): keep the
+        // browser ALIVE and wait for the agent to read the code from email and
+        // inject {action:"security-code", code:"..."}. Do NOT treat as failure.
+        if (!success && CODE_RE.test(after)) {
+          writeState(slug, { phase: 'needs-security-code', slug, ats, url, postSubmitExcerpt: after.replace(/\s+/g, ' ').slice(0, 400), screenshot: s3, ts: Date.now() });
+          console.log('[cfx] needs emailed SECURITY CODE — awaiting {action:"security-code", code:"..."} (browser stays open).');
+          continue;
+        }
+        if (!success) {
+          const errText = await ctx.locator('[role="alert"], [class*="error" i], [aria-invalid="true"]').allInnerTexts().catch(() => []);
+          const errStr = (errText.join(' | ') || 'no success message after submit — likely a missing required field').replace(/\s+/g, ' ').slice(0, 600);
+          // Re-scan on rejection: conditional/lazy required fields only render
+          // after a submit attempt (and a re-render can wipe a committed value).
+          // Re-run fillForm (skip the already-done resume upload) so it re-fills
+          // contact/EEO, RE-COMMITS wiped comboboxes, and surfaces every
+          // now-required field with options — the agent answers them in ONE pass
+          // and re-submits, instead of failing one field at a time. Capped so a
+          // form that always rejects can't loop forever.
+          if (rescans < 6) {
+            rescans++;
+            const re = await fillForm(ctx, answers, { skipResume: true }).catch(() => null);
+            const s4 = await screenshot(page, slug, 'preview');
+            writeState(slug, { phase: 'filled', slug, ats, url, ...(re || {}), submitRejected: true, submitError: errStr, screenshot: s4, ts: Date.now() });
+            console.log(`[cfx] submit rejected (rescan ${rescans}); re-surfaced ${(re ? re.questions.length : 0)} question(s) + ${(re ? re.unfilled.length : 0)} unfilled. Awaiting answers + re-submit. Error: ${errStr.slice(0, 160)}`);
+            continue;
+          }
+          writeState(slug, { phase: 'submit-failed', slug, error: errStr, postSubmitExcerpt: after.slice(0, 400), screenshot: s3, ts: Date.now() });
+          console.log(`[cfx] SUBMIT NOT CONFIRMED after ${rescans} rescans — ${errStr.slice(0, 160)}`);
+          return; // leave browser to close; do NOT mark submitted
+        }
+        const confirmHint = /confirm|verify your email|check your (inbox|email)|we sent/i.test(after);
+        writeState(slug, { phase: 'submitted', slug, postSubmitExcerpt: after.slice(0, 600), needsEmailConfirm: confirmHint, screenshot: s3, ts: Date.now() });
+        console.log(`[cfx] submitted (success confirmed). needsEmailConfirm=${confirmHint}. screenshot ${s3}`);
+        submitted = true;
+      }
+      } catch (loopErr) {
+        const msg = (loopErr && loopErr.message) || '';
+        const closed = /target (page|closed)|context or browser has been closed|page has been closed|crash/i.test(msg);
+        let stillOpen = false; try { stillOpen = !page.isClosed(); } catch { stillOpen = false; }
+        if (closed && stillOpen) {
+          const s = await screenshot(page, slug, 'preview').catch(() => null);
+          writeState(slug, { phase: 'filled', slug, ats, url, transient: true, error: msg.split('\n')[0].slice(0, 160), screenshot: s, ts: Date.now() });
+          console.log('[cfx] transient page error caught; staying alive for retry:', msg.split('\n')[0]);
+          await page.waitForTimeout(1500);
+          continue;
+        }
+        throw loopErr; // genuine error / page truly closed -> outer catch closes cleanly
+      }
+    }
+
+    // post-submit: optional email-confirmation link injected by the agent
+    console.log('\n[cfx] awaiting optional {action:"confirm", link} (or skip to finish) ...');
+    const c2 = await waitForControl(slug, { timeoutMs: 10 * 60 * 1000 });
+    if (c2.action === 'confirm' && c2.link) {
+      await page.goto(c2.link, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForTimeout(3000);
+      const s4 = await screenshot(page, slug, 'confirmed');
+      writeState(slug, { phase: 'confirmed', slug, link: c2.link, screenshot: s4, ts: Date.now() });
+      console.log(`[cfx] opened confirm link; screenshot ${s4}`);
+    } else {
+      writeState(slug, { phase: 'done', slug, ts: Date.now() });
+      console.log('[cfx] done (no confirm link).');
+    }
+  } catch (e) {
+    writeState(slug, { phase: 'error', error: e.message, stack: e.stack, ts: Date.now() });
+    console.error('[cfx] ERROR:', e.message);
+    process.exitCode = 1;
+  } finally {
+    await browser.close().catch(() => {});
+    releaseLock(); // free the shared Ashby profile for the next one-at-a-time run
+  }
+}
+
+async function confirm() {
+  const { positional, flags } = args();
+  const link = positional[0];
+  if (!link) { console.error('usage: confirm <url>'); process.exit(2); }
+  const browser = await launchCamoufox({ headless: flags.headless, locale: loadApplyProfile().locale });
+  try {
+    const { page } = await newStealthPage(browser);
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(3000);
+    const out = path.join(WS, 'signals', 'apply', `confirm-${Date.now()}.png`);
+    await page.screenshot({ path: out, fullPage: true }).catch(() => {});
+    console.log('[cfx] opened confirm link; screenshot', out);
+  } finally { await browser.close().catch(() => {}); }
+}
+
+// Pure pieces, exported so they can be checked without a browser.
+module.exports = { locationVerdict, bestFormFrame, frameCtx };
+
+if (require.main === module) (async () => {
+  installCrashFilter();
+  const { cmd } = args();
+  if (cmd === 'run') return run();
+  if (cmd === 'confirm') return confirm();
+  console.error('commands: run <slug> [--url U] [--headless|--headful] [--no-submit] [--salary N] [--allow-onsite] [--warm|--no-warm]   (headless is the default; --headful only to watch/clear a wall) | confirm <url> [--headful]');
+  process.exit(2);
+})();

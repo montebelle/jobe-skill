@@ -1,0 +1,81 @@
+{
+  "$comment": "Your canonical resume, saved as data/resume-baseline.json in your workspace. `/jobe onboard` writes it from your real resume. Until then every value below is empty on purpose, so nothing is assumed about your field, your degree, or your skills. Field notes. experience: reverse chronological, current role first; each entry is { title, company, location, dates, subtitle, bullets }; dates is printed as written, and the examples show its shape only (Mon YYYY to Present, Mon YYYY to Mon YYYY). subtitle is an optional line of context (team, scope, setting). Each company string must also appear in companyKeyMap in data/bullet-library.json. The bullets written here are the fallback; per posting, bullets are chosen from the library. education: each entry is { degree, school, location, dates }; write degree as it appears on your resume, because it is also compared with degree requirements in a posting. skills: a map from a bucket name of your choosing to a comma separated list. defaultBulletCounts: a map from a library role key to how many bullets that role gets on a resume. selectedProjects: optional entries { name, summary } for work outside a job. Optional keys: contact.github (shown in the contact line when set), contact.website (shown in the contact line when set, and used on application forms), awards (a list of strings), projectsHeading (a different title for the projects section). A tailored resume JSON written per posting keeps every key of this file and adds: coverLetter, whyCompany, postingUrl, archetype, matchScore, compensation, and optionally layout (\"standard\" or \"compact\", a tighter page). Keys that start with $ are notes and are ignored.",
+  "$examples": {
+    "$comment": "Two unrelated professions, to show the shape only. Neither is a default. Bucket names, titles, and degrees are whatever is true for you.",
+    "registered nurse": {
+      "summary": "Two or three sentences in your own voice: current scope, one signature result, and what you want next.",
+      "experience": [
+        {
+          "title": "Registered Nurse, Cardiac Step Down",
+          "company": "Example Hospital",
+          "location": "Denver, CO",
+          "dates": "Mon YYYY to Present",
+          "subtitle": "28 bed unit, day shift",
+          "bullets": ["One fallback bullet per role is enough; the library supplies the rest."]
+        },
+        {
+          "title": "Staff Nurse, Emergency Department",
+          "company": "Example Clinic",
+          "location": "Boulder, CO",
+          "dates": "Mon YYYY to Mon YYYY",
+          "subtitle": "",
+          "bullets": ["One fallback bullet."]
+        }
+      ],
+      "education": [
+        { "degree": "B.S. Nursing", "school": "Example State University", "location": "Denver, CO", "dates": "YYYY to YYYY" }
+      ],
+      "skills": {
+        "Clinical": "Telemetry monitoring, wound care, IV therapy, patient education",
+        "Licenses and certifications": "RN license, BLS, ACLS",
+        "Systems": "Electronic health records, barcode medication administration"
+      },
+      "defaultBulletCounts": { "current": 4, "prior1": 2 }
+    },
+    "tax accountant": {
+      "summary": "Two or three sentences in your own voice: current scope, one signature result, and what you want next.",
+      "experience": [
+        {
+          "title": "Senior Tax Accountant",
+          "company": "Example Tax Group",
+          "location": "Columbus, OH",
+          "dates": "Mon YYYY to Present",
+          "subtitle": "Partnership and S corporation clients",
+          "bullets": ["One fallback bullet per role is enough; the library supplies the rest."]
+        },
+        {
+          "title": "Staff Accountant",
+          "company": "Example Manufacturing",
+          "location": "Dayton, OH",
+          "dates": "Mon YYYY to Mon YYYY",
+          "subtitle": "",
+          "bullets": ["One fallback bullet."]
+        }
+      ],
+      "education": [
+        { "degree": "M.S. Taxation", "school": "Example University", "location": "Columbus, OH", "dates": "YYYY to YYYY" },
+        { "degree": "B.S. Accounting", "school": "Example University", "location": "Columbus, OH", "dates": "YYYY to YYYY" }
+      ],
+      "skills": {
+        "Tax": "Partnership returns, S corporation returns, multistate nexus, tax research",
+        "Credentials": "CPA",
+        "Software": "Tax preparation software, general ledger, spreadsheets"
+      },
+      "defaultBulletCounts": { "current": 4, "prior1": 2 }
+    }
+  },
+  "name": "",
+  "contact": {
+    "phone": "",
+    "email": "",
+    "location": "",
+    "linkedin": "",
+    "website": ""
+  },
+  "summary": "",
+  "experience": [],
+  "selectedProjects": [],
+  "education": [],
+  "skills": {},
+  "defaultBulletCounts": {}
+}

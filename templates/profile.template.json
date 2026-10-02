@@ -1,0 +1,50 @@
+{
+  "$comment": "Your structured preferences, saved as data/profile.json in your workspace and read through lib/profile.js. Every key is optional. Leaving a key out, or leaving it at the value shown here, means nothing is filtered and nothing is assumed about your field. A command line flag always wins over this file. Keys that start with $ are notes and are ignored.",
+  "version": 1,
+  "candidate": {
+    "$comment": "Facts about you that a posting can require. yearsExperience: whole years in your field, or null to skip the years check. degrees: the degrees you hold, written as on your resume, for example [\"BSN\"] or [\"BS Accounting\", \"MS Taxation\"]. clearance: the name of a security clearance you hold; null means unknown, so no check runs; false (or \"none\") means you hold none, and only then does a posting that requires one lose points.",
+    "yearsExperience": null,
+    "degrees": [],
+    "clearance": null
+  },
+  "discovery": {
+    "$comment": "What a job search keeps. workModes: any of remote, hybrid, onsite; an empty list keeps all three. hybridMaxOfficeShare: the largest share of time in an office you accept for a hybrid role, for example 0.25, or null. countries: ISO codes or country names where you can work, for example [\"US\"] or [\"CA\", \"Canada\"]; an empty list keeps every country; a posting is dropped only when its location names a country outside your list, so a city alone is kept. regions: place names where you can work on site, for example [\"Denver\", \"Colorado\"] or [\"Leeds\", \"Yorkshire\"]; it applies only to hybrid and onsite postings, and an empty list keeps every place. A city matches any posting that names it. A US state, a Canadian province or territory, an Australian state, or a UK nation matches by its name and by its postal code, whichever you write (\"Colorado\" also keeps \"Aurora, CO\"); for a region anywhere else, list both the name and the code postings use, the code in capitals, for example [\"Bavaria\", \"BY\"]. maxAgeDays: drop postings older than this many days; 0 turns the recency cut off. seniorityExtensionDays: extra days for titles that say senior, sr, principal, or lead. titleExclude: words or phrases that drop a title, for example [\"intern\", \"travel\"]. titleKeep: phrases that rescue a title an exclude word would drop. salaryFloor: a yearly amount in salaryCurrency; a posting is dropped only when its published yearly range in that same currency tops out below it. A posting with no published pay, pay in another or an unstated currency, or pay per hour or month is kept and labeled as unknown. excludeStaffing: drop staffing agencies and brokers. companySites: career site domains to search directly, for example [\"careers.example.org\"]; an entry may carry a path (\"example.org/jobs\") or be {\"site\": \"...\", \"company\": \"...\"} when the employer name cannot be read from the domain; empty means no company site searches. minScore: hide results scored below this, or null. referralFirst: check your contacts for a referral before a cold application.",
+    "workModes": [],
+    "hybridMaxOfficeShare": null,
+    "countries": [],
+    "regions": [],
+    "maxAgeDays": 30,
+    "seniorityExtensionDays": 0,
+    "titleExclude": [],
+    "titleKeep": [],
+    "salaryFloor": null,
+    "salaryCurrency": "USD",
+    "excludeStaffing": true,
+    "companySites": [],
+    "minScore": null,
+    "referralFirst": false
+  },
+  "skills": {
+    "$comment": "Optional overrides for how skills are scored. Normally this is derived for you: a skill backed by a bullet in your library counts fully, a skill listed only on your resume counts partly, a declared gap counts a little. levels: a map from skill to a number between 0 and 1 that replaces the derived value, for example {\"wound care\": 1, \"payroll tax\": 0.6} (a table in which every level is 0.9 or above is not counted as a rating: lower the skills you hold less firmly, and rate the skills your target postings ask for that you lack below 0.6). gaps: skills you want treated as honest gaps; an entry is a plain string such as \"dialysis\", or {\"label\": \"payroll tax\", \"terms\": [\"payroll tax\", \"form 941\"], \"unlessAlso\": [\"sales tax\"]} when one gap has several names or should not count when the posting also accepts something you hold.",
+    "levels": {},
+    "gaps": []
+  },
+  "evidence": {
+    "$comment": "Where your proof lives. ledger: your evidence file, relative to the workspace. narrative: an optional career story used for cover letters. roots: folders that hold your own work product, as absolute paths; leave empty if you have none. githubAccounts: account names only, never tokens. roots are scanned only by scripts/evidence-index.js. tools: extra tool or method names to look for in those folders; an entry is a plain string, or {\"name\": \"...\", \"match\": [\"<regex source>\"], \"aliases\": [\"<other spelling>\"]}. attribution: rows that say which role a piece of work belongs to, for example {\"source\": \"<folder or project label>\", \"belongsTo\": \"<role key or selectedProjects>\"}.",
+    "ledger": "reference.md",
+    "narrative": "data/career-narrative.md",
+    "roots": [],
+    "githubAccounts": [],
+    "tools": [],
+    "attribution": []
+  },
+  "output": {
+    "$comment": "Rules for rendered documents. forbiddenTerms: internal names (projects, clients, code names) that must never appear in a resume or cover letter. targetPages: the resume length you aim for, or null for no page fill check. stripHyphens: true removes plain hyphens from rendered text; leave false unless you want that style. asciiOnly: true writes rendered text in plain ASCII, folding accented letters to their base letter, writing out symbols such as the micro and degree signs, and removing every other script; leave false to keep your letters as you write them. pageSize: \"letter\" or \"a4\"; null picks Letter when your country list is empty or names a country that uses Letter paper (the US, Canada, Mexico, the Philippines and several countries in Latin America), A4 otherwise. dateLocale: the locale used to write dates, for example \"en-GB\"; null means en-US. sectionHeadings (optional, add the key yourself): your own words for the resume section headings, for a resume not written in English; keys summary, projects, experience, skills, education, awards; an unset key keeps the English heading.",
+    "forbiddenTerms": [],
+    "targetPages": null,
+    "stripHyphens": false,
+    "asciiOnly": false,
+    "pageSize": null,
+    "dateLocale": null
+  }
+}

@@ -1,0 +1,109 @@
+/**
+ * Source: We Work Remotely (remote-first job board, public RSS).
+ *
+ * Feeds (no key required):
+ *   https://weworkremotely.com/remote-jobs.rss   (catch-all, 100 newest)
+ *   https://weworkremotely.com/categories/<slug>.rss   (optional, per category)
+ * The catch-all covers every category. Category feeds only add depth for one
+ * field, so none is read by default: list the category slugs for your own
+ * field in the WWR_CATEGORIES env var (comma separated, for example
+ * "remote-customer-support-jobs,remote-finance-and-legal-jobs").
+ *
+ * Item shape: <item><title>Company: Job Title</title><link/>
+ *   <pubDate>RFC822</pubDate><description>HTML</description>
+ *   <region>Anywhere in the World | USA Only | ...</region></item>
+ *
+ * Parsed with regex (no XML dependency). Role relevance is decided on the
+ * title against the user's target roles, since every feed carries plenty of
+ * unrelated roles.
+ */
+
+const { createPosting } = require('../../../lib/posting');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
+const { recencyDays, withinAge } = require('../../../lib/profile');
+
+const ID = 'weworkremotely';
+
+function feeds() {
+  const slugs = (process.env.WWR_CATEGORIES || '').split(',').map(s => s.trim()).filter(s => /^[a-z0-9-]+$/i.test(s));
+  return [
+    'https://weworkremotely.com/remote-jobs.rss',
+    ...slugs.map(s => `https://weworkremotely.com/categories/${s}.rss`),
+  ];
+}
+
+// Titles are filtered locally against the user's target roles (the feeds carry
+// plenty of unrelated roles).
+
+function decodeEntities(s) {
+  return (s || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'");
+}
+
+function stripHtml(html) {
+  return (html || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function tag(item, name) {
+  const m = item.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i'));
+  return m ? decodeEntities(m[1]).trim() : '';
+}
+
+async function discover(ctx) {
+  const { filters, logger } = ctx;
+  const maxAgeDays = recencyDays(filters);
+  const titleOk = makeTitleMatcher(ctx);
+  const all = [];
+
+  for (const feedUrl of feeds()) {
+    try {
+      const res = await fetch(feedUrl, {
+        headers: { 'Accept': 'application/rss+xml, application/xml', 'User-Agent': 'jobe-discovery/1.0 (personal job search)' },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) throw new Error(`WWR ${res.status}`);
+      const xml = await res.text();
+      const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+      let kept = 0;
+      for (const item of items) {
+        const rawTitle = tag(item, 'title');               // "Company: Job Title"
+        const link = tag(item, 'link');
+        const pubDate = tag(item, 'pubDate');
+        const region = tag(item, 'region');
+        const sep = rawTitle.indexOf(':');
+        const company = sep > 0 ? rawTitle.slice(0, sep).trim() : '';
+        const title = sep > 0 ? rawTitle.slice(sep + 1).trim() : rawTitle;
+        if (!titleOk(title)) continue;
+        if (!withinAge(pubDate, maxAgeDays)) continue;
+        const p = createPosting({
+          title,
+          company,
+          location: region ? `Remote - ${region}` : 'Remote',
+          url: link,
+          postedDate: pubDate,
+          sourceUrl: feedUrl,
+          sourceQuery: 'rss:category-feed',
+          jdText: stripHtml(tag(item, 'description')).slice(0, 4000),
+        }, ID);
+        if (p) { all.push(p); kept++; }
+      }
+      logger.info(`[${ID}] ${feedUrl.split('/').pop()} -> ${items.length} items, ${kept} matching within ${maxAgeDays ? maxAgeDays + 'd' : 'any age'}`);
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err) {
+      logger.warn(`[${ID}] feed failed (${feedUrl}): ${err.message}`);
+    }
+  }
+
+  const seen = new Set();
+  return all.filter(p => !seen.has(p.canonicalUrl) && seen.add(p.canonicalUrl));
+}
+
+module.exports = {
+  id: ID,
+  name: 'We Work Remotely (remote-first board, RSS)',
+  requires: [],
+  rateLimit: { rpm: 10 },
+  discover,
+};

@@ -1,0 +1,14 @@
+{
+  "$comment": "Optional emphasis buckets, saved as data/archetypes.json in your workspace. A bucket groups the kinds of roles you target so a resume can lead with the matching evidence. Jobe ships NO buckets and works without this file: every posting is then labeled General and evidence is ranked by overlap with the job description alone. Define buckets only if your target roles fall into clearly different kinds. Shape: { \"<Bucket name>\": { \"keywords\": [\"<word or phrase that marks this kind of posting>\"], \"portfolioDomains\": [\"<optional heading in your reference.md>\"] } }. A posting gets the bucket whose keywords appear most often in its description. Use the same bucket names in the optional archetypes list of each bullet in data/bullet-library.json and in the optional archetype of a row in data/queries/seeds.json. A bucket is only ever a small ranking bonus, never a filter. Keys that start with $ are notes and are ignored, so this file defines no bucket until you add one next to them.",
+  "$examples": {
+    "$comment": "Two unrelated fields, to show the shape only. Neither is a default. Write your own bucket names and keywords from your own field.",
+    "registered nurse": {
+      "Acute Care": { "keywords": ["icu", "telemetry", "med surg", "emergency department"], "portfolioDomains": ["Inpatient"] },
+      "Care Coordination": { "keywords": ["case management", "discharge planning", "utilization review"], "portfolioDomains": ["Coordination"] }
+    },
+    "tax accountant": {
+      "Compliance": { "keywords": ["tax return", "filing", "provision", "audit support"], "portfolioDomains": ["Compliance"] },
+      "Advisory": { "keywords": ["tax planning", "entity structure", "client advisory"], "portfolioDomains": ["Advisory"] }
+    }
+  }
+}

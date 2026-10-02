@@ -1,0 +1,118 @@
+/**
+ * Source: Greenhouse direct board API (single-slug caller).
+ *
+ * Board slugs come from ctx.filters.atsSlugs.greenhouse (an array), the
+ * workspace company index (data/companies/index.json, grown by every run),
+ * and the portals seed (the user's data/companies/portals.json first, then
+ * the shared configs/portals.json, which ships empty).
+ *
+ * Endpoint: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true
+ */
+
+const path = require('path');
+const fs = require('fs');
+const { createPosting, stripHtml } = require('../../../lib/posting');
+const { getProjectRoot } = require('../../../lib/config');
+const { makeTitleMatcher } = require('../../../lib/role-queries');
+const { portalList } = require('../../seed-files');
+
+const ID = 'greenhouse-direct';
+
+function loadSlugs(ctx) {
+  const s = new Set();
+  for (const slug of ctx.filters?.atsSlugs?.greenhouse || []) s.add(slug);
+
+  // Company index
+  const p = path.join(getProjectRoot(), 'data/companies/index.json');
+  if (fs.existsSync(p)) {
+    try {
+      const idx = JSON.parse(fs.readFileSync(p, 'utf8'));
+      for (const [slug, meta] of Object.entries(idx)) {
+        if (meta.ats === 'greenhouse') s.add(slug);
+      }
+    } catch {}
+  }
+
+  // Portals seed: workspace copy first, then the shared one (a legacy file is
+  // a flat array of { ats, slug }).
+  for (const e of portalList('greenhouse')) {
+    const ats = e.ats || 'greenhouse';
+    const slug = typeof e === 'string' ? e : e.slug;
+    if (slug && ats === 'greenhouse') s.add(slug);
+  }
+
+  return [...s];
+}
+
+async function fetchBoard(slug) {
+  const url = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+// The /jobs endpoint omits the board's display name. The board root endpoint
+// returns the real, human company name (a slug such as "acmehealth" reads
+// "Acme Health" there, and a short slug such as "ah" still resolves to the
+// full name). Fetched lazily, only for boards that have a matching role, so
+// we don't pay a request for empty boards.
+async function fetchBoardName(slug) {
+  try {
+    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${slug}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return (d && typeof d.name === 'string' && d.name.trim()) ? d.name.trim() : null;
+  } catch { return null; }
+}
+
+// Fallback only: title-case the slug when the board name is unavailable.
+function slugFallbackName(slug) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function discover(ctx) {
+  const { logger } = ctx;
+  const titleOk = makeTitleMatcher(ctx);
+  const slugs = loadSlugs(ctx);
+  logger.info(`[${ID}] scanning ${slugs.length} Greenhouse boards`);
+
+  const all = [];
+  for (const slug of slugs) {
+    try {
+      const data = await fetchBoard(slug);
+      if (!data || !data.jobs) continue;
+      const matched = data.jobs.filter(j => titleOk(j.title));
+      if (!matched.length) continue;
+      const company = (await fetchBoardName(slug)) || slugFallbackName(slug);
+      for (const j of matched) {
+        const p = createPosting({
+          title: j.title,
+          company,
+          companySlug: slug,
+          location: j.location?.name,
+          url: j.absolute_url,
+          department: (j.departments || []).map(d => d.name).join(', '),
+          // first_published is the original open date; updated_at re-stamps on
+          // every repost or refresh, which let reqs opened months earlier pass
+          // the recency gate.
+          postedDate: j.first_published || j.updated_at,
+          jdText: stripHtml(j.content || '').slice(0, 8000),
+          sourceUrl: `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`,
+          sourceQuery: `greenhouse:${slug}`,
+        }, ID);
+        if (p) all.push(p);
+      }
+    } catch (err) {
+      logger.warn(`[${ID}] ${slug}: ${err.message}`);
+    }
+  }
+  return all;
+}
+
+module.exports = {
+  id: ID,
+  name: 'Greenhouse Direct',
+  requires: [],
+  rateLimit: { rpm: 120 },
+  discover,
+};

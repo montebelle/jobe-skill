@@ -1,0 +1,36 @@
+{
+  "_README": "Copy this file to data/apply-profile.json (gitignored) and fill in your own values. It supplies the apply harness with answers a resume does not carry: eligibility questions, salary target, 'how did you hear about us', and OPTIONAL EEO self-identification. Identity (name/email/phone/location/links/school/current role) is read from your report resume JSON automatically; the identity fields below are only fallbacks/overrides. EVERY key is optional and ships blank. A blank value is never guessed: the harness leaves that question unanswered and shows it to you at the glance before anything is submitted. Keys starting with _ are notes and are ignored.",
+
+  "_help_eligibility": "Answer each with \"Yes\" or \"No\" (or true / false), or leave \"\" to be asked every time. workAuthorized: you may legally work in the country of the role. requireSponsorship: you need visa or work permit sponsorship now or later. citizen: you are a citizen of the country the form asks about. citizenOrPermanentResident: you are a citizen OR a permanent resident (a permanent resident answers No to citizen and Yes here). domiciled: you live in the country the form asks about. federalEligible: you are eligible for federal or government employment. clearance: you hold an active security clearance. relocation: you are willing to relocate. nonCompete: you are bound by a non-competition agreement or similar restrictive covenant. A Yes on nonCompete only answers that question on a form; whether to apply to an employer that competes with your current one stays your decision, and /jobe apply warns you before it submits.",
+  "workAuthorized": "",
+  "requireSponsorship": "",
+  "citizen": "",
+  "citizenOrPermanentResident": "",
+  "domiciled": "",
+  "federalEligible": "",
+  "clearance": "",
+  "relocation": "",
+  "nonCompete": "",
+
+  "_help_salary": "salaryStrategy picks ONE figure out of a published pay band: \"midpoint\" (default), \"top\", or \"bottom\". It applies to the band stored with a report and to the band the harness reads off the live posting. Either band is used only when it is a yearly salary in your currency (discovery.salaryCurrency in data/profile.json; a bare $ is read as USD); an hourly, weekly, or monthly rate, or pay in another currency, leaves your stored figure in place. Only currencies written with a dollar sign are read (USD, CAD, AUD, NZD, SGD, HKD, MXN); with any other salaryCurrency your stored salaryExpectation is always used. salaryExpectation is the yearly figure used when no band is published. A --salary flag on the command line wins over all of it.",
+  "salaryStrategy": "midpoint",
+  "salaryExpectation": "",
+
+  "_help_howHeard": "Typed into 'How did you hear about us' fields and tried first on a dropdown of sources. Blank uses 'Company careers page'.",
+  "howHeard": "",
+
+  "_help_identity": "Fallbacks used only when the report resume JSON lacks the value. state is the region code your address uses; stateName is its full name, for dropdowns that list full names. A blank state is read off a location written as \"City, ST\" only when country is the United States (or the location ends with it); anywhere else set state yourself, or the field is left for you at the glance. country is the country name as forms list it. degreeLevel is the level a degree DROPDOWN should pick (for example \"Associate\", \"Bachelor\", \"Master\", \"Doctorate\"); leave it blank to derive the level from your degree. locale is the browser locale the harness presents, a tag such as \"en-GB\" or \"fr-CA\"; blank means en-US. Nine more fallback keys are read but not listed below, because your resume JSON normally carries them; add any of them here by hand when a report lacks the value: fullName, email, phone, location (written as \"City, Region\"), currentCompany, currentTitle, school, degree, gradYear.",
+  "state": "",
+  "stateName": "",
+  "postalCode": "",
+  "country": "",
+  "linkedin": "",
+  "github": "",
+  "website": "",
+  "degreeLevel": "",
+  "locale": "",
+
+  "_help_eeo": "EEO/demographic self-identification is OPT-IN and entirely your choice. Leave eeoSelfIdentify false to DECLINE every demographic question (the harness transmits nothing). Set it to true and fill eeoValues with YOUR OWN answers to self-identify. Recognized keys: gender, race, veteran, disability, hispanic, transgender, orientation, pronouns. Each value is the option text as forms word it, or a list of acceptable wordings of the same choice, for example { \"gender\": [\"Woman\", \"Female\"] }. The harness picks an option only when it is, or contains, one of your wordings as a whole phrase; a question with no value here, or with no matching option, is declined.",
+  "eeoSelfIdentify": false,
+  "eeoValues": {}
+}

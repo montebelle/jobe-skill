@@ -1,0 +1,8 @@
+{
+  "_doc": "Optional. Each anchor is one distinct capability written up in your evidence file (reference.md) that must have at least one bullet in data/bullet-library.json. A bullet covers an anchor when its text or keywords contain any of the anchor's terms (case insensitive). Checked by: node scripts/check-evidence-coverage.js (exit 1 on any uncovered anchor). When you add a capability to your evidence file, add a bullet AND an anchor. Leave anchors empty to skip the check. The _examples block is ignored by the script; copy its shape, not its content.",
+  "_examples": [
+    { "id": "sepsis-screening-rollout", "section": "Current role, ward protocols", "terms": ["sepsis screening", "early warning score"] },
+    { "id": "multi-state-filing-review", "section": "Prior role, filing season", "terms": ["multi-state filing", "apportionment review"] }
+  ],
+  "anchors": []
+}

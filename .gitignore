@@ -1,0 +1,93 @@
+# Dependencies (package-lock.json IS tracked, so installs are reproducible)
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+
+# Next.js build output (under web/)
+web/.next/
+web/tsconfig.tsbuildinfo
+web/next-env.d.ts
+
+# Environment and secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# User layer files (personal). With named workspaces they all live under
+# /users/ (ignored below). In single user mode the workspace IS the repo root,
+# so every personal path is listed here one by one. A new user file needs a
+# line here; test/root-integration-install.test.js checks the scaffolded ones.
+/_profile.md
+/reference.md
+/_archive/
+data/profile.json
+data/tracker.md
+data/story-bank.md
+data/followups.md
+data/contacts.json
+data/calibration.jsonl
+data/apply-queue.json
+data/apply-queue.json.bak
+data/apply-profile.json
+data/apply-wrappers.json
+data/resume-baseline.json
+data/bullet-library.json
+data/bullet-library.backup*.json
+data/archetypes.json
+data/career-narrative.md
+data/evidence-*.json
+data/.evidence-corpus/
+data/evidence/
+data/queries/seeds.json
+data/companies/index.json
+data/companies/negative-list.json
+data/companies/portals.json
+data/companies/non-tech-seed.json
+# Not listed on purpose: data/companies/staffing-list.json, the one shared
+# tracked file under data/.
+# Half written files left behind by an interrupted atomic write, and backups
+data/**/*.tmp.*
+*.bak-*
+# Older locations of personal files
+.claude/skills/jobe/modes/_profile.md
+.claude/skills/jobe/reference.md
+.agents/skills/jobe/modes/_profile.md
+.agents/skills/jobe/reference.md
+configs/local.json
+configs/archetypes.json
+configs/apply-profile.json
+
+# Run artifacts (anchored to the repo root so web/src/{components,app}/reports/
+# are not caught by the pattern)
+/signals/
+/reports/
+/output/
+/tmp/
+configs/_temp-*
+
+# Per user workspaces (personal data for every person on this machine)
+/users/
+
+# Local tool state: per machine agent settings, code search index, browser logs
+.claude/settings.local.json
+.codesearch.db
+.playwright-mcp/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Build and rendered outputs
+*.pptx
+*.docx
+*.pdf
+
+# Logs
+*.log
+npm-debug.log*

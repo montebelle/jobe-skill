@@ -1,0 +1,11 @@
+{
+  "$comment": "Your own employer boards per applicant tracking system, saved as data/companies/portals.json in your workspace. Read first and combined with the shared configs/portals.json. Every list starts EMPTY. An entry is the board identifier as a string, or { \"slug\": \"<identifier>\", \"name\": \"<Employer name>\" }; use the object form for bamboohr and personio, whose feeds carry no employer name. Keys that start with $ are notes and are ignored.",
+  "greenhouse": [],
+  "lever": [],
+  "ashby": [],
+  "workable": [],
+  "recruitee": [],
+  "breezy": [],
+  "bamboohr": [],
+  "personio": []
+}

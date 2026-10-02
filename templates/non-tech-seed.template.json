@@ -1,0 +1,23 @@
+{
+  "$schema": "Your target employers on Workday, SmartRecruiters, and iCIMS, saved as data/companies/non-tech-seed.json in your workspace. These systems have no search across companies, so each employer you want scanned is listed explicitly. The three lists start EMPTY: nothing is scanned until you add an employer. Entry shapes: workday { host, tenant, site, company, industry }; smartrecruiters { companyId, company, industry }; icims { host, company, industry }. `industry` is a free text label for your own reference. Keys that start with $ are notes and are ignored.",
+  "$howToFind": {
+    "workday": "Open the employer's careers page and follow it to the job list. The address looks like https://<tenant>.wd<number>.myworkdayjobs.com/<site>. host is everything before the first slash (for example example.wd5.myworkdayjobs.com), tenant is the first part of the host, and site is the path segment after the host. Test it with: curl -X POST https://<host>/wday/cxs/<tenant>/<site>/jobs -H 'Content-Type: application/json' -d '{\"appliedFacets\":{},\"limit\":1,\"offset\":0,\"searchText\":\"<your role>\"}' . A 200 response with a jobPostings list means the entry works. A 422 usually means the site segment is wrong.",
+    "smartrecruiters": "The careers address looks like https://jobs.smartrecruiters.com/<companyId>. Test it with: curl 'https://api.smartrecruiters.com/v1/companies/<companyId>/postings?q=<your role>&limit=1' . A 200 response with a content list means the entry works. companyId is case sensitive.",
+    "icims": "The careers address looks like https://careers-<name>.icims.com. host is that host name. iCIMS pages are harder to read reliably than the other two systems, so when an employer offers more than one, prefer Workday or SmartRecruiters."
+  },
+  "$examples": {
+    "$comment": "Shape only. These hosts do not exist. Copy an entry into the matching list above and replace every value.",
+    "workday": [
+      { "host": "example.wd5.myworkdayjobs.com", "tenant": "example", "site": "Careers", "company": "Example Health System", "industry": "healthcare" }
+    ],
+    "smartrecruiters": [
+      { "companyId": "ExampleAccountingGroup", "company": "Example Accounting Group", "industry": "accounting" }
+    ],
+    "icims": [
+      { "host": "careers-example.icims.com", "company": "Example School District", "industry": "education" }
+    ]
+  },
+  "workday": [],
+  "smartrecruiters": [],
+  "icims": []
+}
