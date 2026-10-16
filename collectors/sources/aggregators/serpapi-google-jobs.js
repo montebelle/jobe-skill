@@ -21,11 +21,17 @@ const ID = 'serpapi-google-jobs';
 async function serpFetch(params, apiKey, attempt = 0) {
   const qs = new URLSearchParams({ ...params, api_key: apiKey });
   const res = await fetch(`https://serpapi.com/search.json?${qs}`);
-  // 429 (hourly rate limit) / 5xx are transient: back off and retry so a
-  // concurrent burst does not zero out the whole source. Respect Retry-After.
-  if ((res.status === 429 || res.status >= 500) && attempt < 4) {
+  // A quota 429 applies to the source, not one query. Retrying every query
+  // multiplies a known quota failure into a request storm. Stop immediately
+  // and let the other sources continue. Bounded retries remain for 5xx only.
+  if (res.status === 429) {
+    const err = new Error('SerpAPI quota exhausted');
+    err.code = 'SERPAPI_QUOTA';
+    throw err;
+  }
+  if (res.status >= 500 && attempt < 2) {
     const retryAfter = Number(res.headers.get('retry-after')) * 1000;
-    const wait = retryAfter > 0 ? retryAfter : Math.min(2000 * 2 ** attempt, 15000);
+    const wait = retryAfter > 0 ? retryAfter : Math.min(2000 * 2 ** attempt, 8000);
     await new Promise((r) => setTimeout(r, wait));
     return serpFetch(params, apiKey, attempt + 1);
   }
@@ -34,7 +40,7 @@ async function serpFetch(params, apiKey, attempt = 0) {
 }
 
 async function discover(ctx) {
-  const { queries, filters = {}, auth, logger } = ctx;
+  const { queries, filters = {}, auth, logger, reportSourceStatus } = ctx;
   if (!auth.serpApiKey) { logger.warn(`[${ID}] skipped: no SERPAPI_KEY`); return []; }
 
   const country = searchCountry(filters.countries);
@@ -78,6 +84,11 @@ async function discover(ctx) {
       } while (next && pageCount < MAX_PAGES);
       logger.info(`[${ID}] "${q.query}" @ "${q.location}" -> ${pageCount} pages`);
     } catch (err) {
+      if (err.code === 'SERPAPI_QUOTA') {
+        reportSourceStatus?.('degraded', 'quota_exhausted');
+        logger.warn(`[${ID}] quota exhausted; stopping this source after the first 429`);
+        break;
+      }
       logger.warn(`[${ID}] query "${q.query}" failed: ${err.message}`);
     }
   }

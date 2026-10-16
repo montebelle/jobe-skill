@@ -89,6 +89,7 @@ test('run(): policy driven filters at both stages, original publish date, pay fl
   const outDir = path.join(root, 'signals', 'discovered', fs.readdirSync(path.join(root, 'signals', 'discovered'))[0]);
   const summary = JSON.parse(fs.readFileSync(path.join(outDir, 'discovery-summary.json'), 'utf8'));
   assert.equal(summary.perSource['greenhouse-direct'], 6, 'the source gate dropped the title outside the seeds');
+  assert.deepEqual(summary.sourceStatus['greenhouse-direct'], { status: 'ok' });
   assert.equal(summary.rejected.role, 1, 'title policy: travel');
   assert.equal(summary.rejected.nonRemote, 1, 'remote is outside this user work modes');
   assert.equal(summary.rejected.recency, 1, 'first published 60 days ago, refreshed yesterday');

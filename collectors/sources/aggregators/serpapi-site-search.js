@@ -74,11 +74,17 @@ function companySiteDomains(filters = {}) {
 async function serpFetch(params, apiKey, attempt = 0) {
   const qs = new URLSearchParams({ ...params, api_key: apiKey, engine: 'google' });
   const res = await fetch(`https://serpapi.com/search.json?${qs}`);
-  // 429 (hourly rate limit) / 5xx are transient: back off and retry so a
-  // concurrent burst does not zero out the whole source. Respect Retry-After.
-  if ((res.status === 429 || res.status >= 500) && attempt < 4) {
+  // A quota 429 applies to the source, not one query. Stop immediately so a
+  // known quota failure cannot fan out across every site/role combination.
+  // Bounded retries remain for transient 5xx responses only.
+  if (res.status === 429) {
+    const err = new Error('SerpAPI quota exhausted');
+    err.code = 'SERPAPI_QUOTA';
+    throw err;
+  }
+  if (res.status >= 500 && attempt < 2) {
     const retryAfter = Number(res.headers.get('retry-after')) * 1000;
-    const wait = retryAfter > 0 ? retryAfter : Math.min(2000 * 2 ** attempt, 15000);
+    const wait = retryAfter > 0 ? retryAfter : Math.min(2000 * 2 ** attempt, 8000);
     await new Promise((r) => setTimeout(r, wait));
     return serpFetch(params, apiKey, attempt + 1);
   }
@@ -151,7 +157,7 @@ function extractLocation(text) {
 // ── discover ────────────────────────────────────────────────
 
 async function discover(ctx) {
-  const { queries, filters, auth, logger } = ctx;
+  const { queries, filters, auth, logger, reportSourceStatus } = ctx;
   if (!auth.serpApiKey) { logger.warn(`[${ID}] skipped: no SERPAPI_KEY`); return []; }
 
   const siteQueries = buildSiteQueries(queries, filters);
@@ -180,6 +186,11 @@ async function discover(ctx) {
         if (p) all.push(p);
       }
     } catch (err) {
+      if (err.code === 'SERPAPI_QUOTA') {
+        reportSourceStatus?.('degraded', 'quota_exhausted');
+        logger.warn(`[${ID}] quota exhausted; stopping this source after the first 429`);
+        break;
+      }
       logger.warn(`[${ID}] query failed: ${err.message}`);
     }
   }

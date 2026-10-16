@@ -455,11 +455,25 @@ async function run(opts = {}) {
 
   // ── Discover (parallel, rate-limited per source) ──
   log.info(`running ${sources.length} sources in parallel`);
+  const sourceStatus = Object.fromEntries(sources.map((source) => [source.id, { status: 'ok' }]));
   const results = await Promise.allSettled(sources.map(s => {
     const limiter = createLimiter(s.rateLimit || { rpm: 120 });
-    const ctx = { queries, filters, auth, logger: mkLogger(`${s.id} `), limiter };
+    const ctx = {
+      queries,
+      filters,
+      auth,
+      logger: mkLogger(`${s.id} `),
+      limiter,
+      reportSourceStatus: (status, reason = null) => {
+        sourceStatus[s.id] = { status, ...(reason ? { reason } : {}) };
+      },
+    };
     return s.discover(ctx)
-      .catch(err => { log.warn(`${s.id} threw: ${err.message}`); return []; });
+      .catch(err => {
+        sourceStatus[s.id] = { status: 'failed', reason: 'source_exception' };
+        log.warn(`${s.id} threw: ${err.message}`);
+        return [];
+      });
   }));
 
   const raw = [];
@@ -571,6 +585,7 @@ async function run(opts = {}) {
   const summary = {
     date: TODAY,
     perSource,
+    sourceStatus,
     totalRaw: raw.length,
     afterDedup: deduped.length,
     afterFilter: kept.length,

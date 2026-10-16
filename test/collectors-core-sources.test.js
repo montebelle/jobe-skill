@@ -202,12 +202,12 @@ test('workday: tenants come from the user seed file and search terms from the us
   assert.equal(calls.length, 2, 'one search per seed role');
 });
 
-test('serpapi google jobs: backs off on 429, stops on an empty page, names a country only under a policy', async () => {
+test('serpapi google jobs: stops on 429, stops on an empty page, names a country only under a policy', async () => {
   let n = 0;
+  const quota = () => respond('slow down', { status: 429, headers: { 'retry-after': '0.001' } });
   const serve = () => {
     n++;
-    if (n === 1) return respond('slow down', { status: 429, headers: { 'retry-after': '0.001' } });
-    if (n === 2) {
+    if (n === 1) {
       return respond({
         jobs_results: [{ title: 'Tax Accountant', company_name: 'Ledger and Finch', location: 'Remote', apply_options: [{ link: 'https://example.org/apply/1' }], description: 'Prepare returns' }],
         serpapi_pagination: { next_page_token: 'tok' },
@@ -216,9 +216,14 @@ test('serpapi google jobs: backs off on 429, stops on an empty page, names a cou
     return respond({ jobs_results: [], serpapi_pagination: { next_page_token: 'stale' } });
   };
   const src = load('aggregators/serpapi-google-jobs');
+  const quotaRows = await withFetch(quota, () => src.discover(ctx(ACCOUNTANT, {}, KEYS)));
+  assert.deepEqual(quotaRows, []);
+  assert.equal(calls.length, 1, 'a provider quota response stops the source immediately');
+
+  n = 0;
   const got = await withFetch(serve, () => src.discover(ctx(ACCOUNTANT, {}, KEYS)));
   assert.equal(got.length, 1);
-  assert.equal(calls.length, 3, 'retry after the 429, then one empty page and no more');
+  assert.equal(calls.length, 2, 'one result page, then one empty page and no more');
   assert.equal(new URL(calls[0].url).searchParams.has('location'), false, 'no policy, no country');
 
   assert.equal(new URL(calls[0].url).searchParams.has('gl'), false, 'no policy, no market');

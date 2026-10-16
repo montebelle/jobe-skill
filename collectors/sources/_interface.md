@@ -15,6 +15,7 @@ function matching this signature:
  * @param {object}   ctx.auth     - { serpApiKey, braveApiKey }; other keys are read from env
  * @param {object}   ctx.logger   - { info(msg), warn(msg), error(msg) }
  * @param {object}   ctx.limiter  - rate limiter built from `rateLimit`; `await ctx.limiter.wait()`
+ * @param {Function} ctx.reportSourceStatus - report `degraded|failed|skipped` plus a stable reason
  * @returns {Promise<Posting[]>}
  */
 async function discover(ctx) { ... }
@@ -88,6 +89,10 @@ module.exports = {
     an endpoint that only answers a browser style agent gets the same product
     token inside a `Mozilla/5.0 (compatible; ...)` envelope, or a plain
     browser agent, never an identity.
+14. **Stop on quota exhaustion.** A provider-wide quota response is not a
+    per-query transient. Stop that source after the first quota response,
+    report `degraded` with a stable reason, and allow independent sources to
+    continue. Never fan a known quota failure across the remaining query set.
 
 ## Naming
 
